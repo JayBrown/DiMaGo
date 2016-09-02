@@ -5,7 +5,7 @@
 [![DiMaGo-license](http://img.shields.io/badge/license-MIT+-blue.svg)](https://github.com/JayBrown/DiMaGo/blob/master/license.md)
 
 # DiMaGo <img src="https://github.com/JayBrown/DiMaGo/blob/master/img/jb-img.png" height="20px"/>
-**macOS workflows and shell scripts to create DMGs with special focus on InfoSec, namely using S/MIME encryption**
+**macOS workflows and shell scripts to create disk images (DMGs and sparsebundles) with special focus on InfoSec, namely using S/MIME encryption**
 
 If you encrypt a DMG or sparsebundle with a public S/MIME key, only a user in possession of the private key will be able to access the image contents. This is great against wordlist attacks, or for hiding content e.g. in the cloud without the use of other tools like **Boxcryptor** or **Cryptomator**. You can also use multiple S/MIME keys, if more than one person needs to have access to the image contents.
 
