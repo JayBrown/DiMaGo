@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# DiMaGo v1.0 (beta)
+# DiMaGo v1.0.1 (beta)
 # DiMaGo ➤ Create (shell script version)
 #
 # Note: DiMaGo will remain in beta status until DiMaGo ➤ Verify has been scripted
@@ -8,6 +8,7 @@
 LANG=en_US.UTF-8
 export PATH=/usr/local/bin:$PATH
 ACCOUNT=$(/usr/bin/id -un)
+CURRENT_VERSION="1.01"
 
 # check compatibility
 MACOS2NO=$(/usr/bin/sw_vers -productVersion | /usr/bin/awk -F. '{print $2}')
@@ -455,6 +456,17 @@ if [[ "$CHAIN_INFO" == *"could not be found." ]] ; then
 	/usr/bin/security create-keychain -P DiMaGo.keychain && /usr/bin/security list-keychains -d user -s login.keychain DiMaGo.keychain && /usr/bin/security set-keychain-settings -u DiMaGo.keychain
 fi
 
+# check for update
+NEWEST_VERSION=$(/usr/bin/curl --silent https://api.github.com/repos/JayBrown/DiMaGo/releases/latest | /usr/bin/awk '/tag_name/ {print $2}' | xargs)
+if [[ "$NEWEST_VERSION" == "" ]] ; then
+	NEWEST_VERSION="0"
+fi
+NEWEST_VERSION=${NEWEST_VERSION//,}
+if (( $(echo "$NEWEST_VERSION > $CURRENT_VERSION" | /usr/bin/bc -l) )) ; then
+	notify "Update available" "DiMaGo v$NEWEST_VERSION"
+	/usr/bin/open "https://github.com/JayBrown/DiMaGo/releases/latest"
+fi
+
 for FILEPATH in "$1"
 do
 
@@ -744,13 +756,13 @@ tell application "System Events"
 		set theList to theList & {(anItem) as string}
 	end repeat
 	set AppleScript's text item delimiters to return & linefeed
-	set theResult to choose from list theList with prompt "Choose the email address(es). The corresponding public key(s) will be used to encrypt the image." with title "DiMaGo" OK button name "Select" cancel button name "Cancel" with multiple selections allowed
+	set theResult to choose from list theList with prompt "Choose the email address(es). The public key(s) will be used to encrypt the image." with title "DiMaGo" OK button name "Select" cancel button name "Cancel" with multiple selections allowed
 	set AppleScript's text item delimiters to ""
 end tell
 theResult
 EOT)
 			if [[ "$KEY_ADDR" == "" ]] || [[ "$KEY_ADDR" == "false" ]] ; then
-				KEY_RETURN="false"
+				exit # ALT: continue
 			else
 				KEY_RETURN="true"
 				KEY_ROW=$(echo "$KEY_ADDR" | /usr/bin/awk '{gsub(", "," "); print}')
