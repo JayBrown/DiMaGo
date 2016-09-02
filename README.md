@@ -5,7 +5,7 @@
 [![DiMaGo-license](http://img.shields.io/badge/license-MIT+-blue.svg)](https://github.com/JayBrown/DiMaGo/blob/master/license.md)
 
 # DiMaGo <img src="https://github.com/JayBrown/DiMaGo/blob/master/img/jb-img.png" height="20px"/>
-**macOS workflows and shell scripts to create DMGs with special focus on InfoSec, namely S/MIME encryption**
+**macOS workflows and shell scripts to create DMGs with special focus on InfoSec, namely using S/MIME encryption**
 
 If you encrypt a DMG or sparsebundle with a public S/MIME key, only a user in possession of the private key will be able to access the image contents. This is great against wordlist attacks, or for hiding content e.g. in the cloud without the use of other tools like **Boxcryptor** or **Cryptomator**. You can also use multiple S/MIME keys, if more than one person needs to have access to the image contents.
 
@@ -44,7 +44,7 @@ Only necessary if for some reason you want to run this from the shell or another
 * encrypts with AES-256 or AES-128
 * encrypts using a password
 * encrypts using public S/MIME keys available in the user's keychains
-* encrypts using both password and public S/MIME keys
+* encrypts using both password and public S/MIME keys (**less secure**)
 * encrypts using multiple public S/MIME keys for collaboration scenarios
 * ignores expired S/MIME certificates
 * ignores S/MIME-compatible CA certificates (end entities only)
@@ -53,9 +53,9 @@ Only necessary if for some reason you want to run this from the shell or another
 * codesigns existing unsigned images
 * re-codesigns existing codesigned images
 * generates a SHA-2 256-bit checksum
-* automatically splits DMGs larger than 200 MB, if the user has installed `gsplit while keeping the original image file
+* automatically splits DMGs larger than 200 MB, if the user has installed `gsplit` while keeping the original image file
 * creates its own DiMaGo keychain in the userspace, accessible via macOS **Keychain Access**
-* stores UUIDs, passwords, SHA-256 checksum, S/MIME information (email addresses & SKIDs) in a DiMaGo keychain entry
+* stores UUIDs, passwords, SHA-256 checksums, S/MIME information (email addresses & SKIDs) in discrete DiMaGo keychain entries
 
 ## Planned Functionality
 * preferences for image creation: volume icon, background image etc. (DMGs only)
