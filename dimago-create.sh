@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# DiMaGo v1.0.1 (beta)
+# DiMaGo v1.0.2 (beta)
 # DiMaGo ➤ Create (shell script version)
 #
 # Note: DiMaGo will remain in beta status until DiMaGo ➤ Verify has been scripted
@@ -8,7 +8,7 @@
 LANG=en_US.UTF-8
 export PATH=/usr/local/bin:$PATH
 ACCOUNT=$(/usr/bin/id -un)
-CURRENT_VERSION="1.01"
+CURRENT_VERSION="1.02"
 
 # check compatibility
 MACOS2NO=$(/usr/bin/sw_vers -productVersion | /usr/bin/awk -F. '{print $2}')
@@ -647,6 +647,42 @@ EOT)
 		exit # ALT: continue
 	fi
 
+	# set maximum sparsebundle size in GB
+	if [[ "$TYPE" == "sparsebundle" ]] ; then
+		MAX_SIZE=""
+		# BREAKER="" # ALT: for workflow only
+		SIZE_RETURN=""
+		until [[ "$SIZE_RETURN" == "true" ]]
+		do
+			SIZE_INPUT=$(/usr/bin/osascript 2>/dev/null << EOT
+tell application "System Events"
+	activate
+	set theLogoPath to ((path to library folder from user domain) as text) & "Caches:local.lcars.dimago:lcars.png"
+	set theMaximumSize to text returned of (display dialog "Enter the maximum volume size for the sparsebundle in gigabyte (integers only). The default maximum size is 5 GB." & return & return & "Please note that the disk image will grow as you add content, and the initial size will be much smaller." ¬
+		default answer "5" ¬
+		buttons {"Cancel", "Enter"} ¬
+		default button 2 ¬
+		with title "DiMaGo" ¬
+		with icon file theLogoPath ¬
+		giving up after 180)
+end tell
+theMaximumSize
+EOT)
+			if [[ "$SIZE_INPUT" == "false" ]] || [[ "$SIZE_INPUT" == "" ]] ; then
+				exit # ALT: BREAKER="true" && break
+			fi
+			case $SIZE_INPUT in
+				'' | '0' | *.* | *,* | */* | *+* | *-* | *'*'* | *.*.* | *[!0-9]*) notify "Error: false input \"$SIZE_INPUT\"" "Only integers of at least 1" && continue ;;
+				*) SIZE_RETURN="true" && MAX_SIZE="$SIZE_INPUT" && continue ;;
+			esac
+		done
+	fi
+
+	# ALT: only for workflow
+	# if [[ "$BREAKER" == "true" ]] ; then
+	#	continue
+	# fi
+
 	# choose encryption
 	ENCRYPT_CHOICE=$(/usr/bin/osascript 2>/dev/null << EOT
 tell application "System Events"
@@ -856,14 +892,14 @@ EOT)
 		fi
 	elif [[ "$TYPE" == "sparsebundle" ]] ; then
 		if [[ "$ENCRYPT" == "false" ]] ; then
-			CREATE=$(/usr/bin/hdiutil create -srcfolder "$FILEPATH" -volname "$VOL_NAME" -fs HFS+J -format UDSB -ov "$TARGET_PARENT/$DMG_NAME" 2>&1)
+			CREATE=$(/usr/bin/hdiutil create -srcfolder "$FILEPATH" -volname "$VOL_NAME" -fs HFS+J -format UDSB -size "$MAX_SIZE"g -ov "$TARGET_PARENT/$DMG_NAME" 2>&1)
 		elif [[ "$ENCRYPT" == "true" ]] ; then
 			if [[ "$METHOD" == "pw" ]] ; then
-				CREATE=$(echo -n "$PASSPHRASE" | /usr/bin/hdiutil create -srcfolder "$FILEPATH" -volname "$VOL_NAME" -fs HFS+J -format UDSB -encryption "$ENCRYPT_CHOICE" -stdinpass -ov "$TARGET_PARENT/$DMG_NAME" 2>&1)
+				CREATE=$(echo -n "$PASSPHRASE" | /usr/bin/hdiutil create -srcfolder "$FILEPATH" -volname "$VOL_NAME" -fs HFS+J -format UDSB -size "$MAX_SIZE"g -encryption "$ENCRYPT_CHOICE" -stdinpass -ov "$TARGET_PARENT/$DMG_NAME" 2>&1)
 			elif [[ "$METHOD" == "key" ]] ; then
-				CREATE=$(/usr/bin/hdiutil create -srcfolder "$FILEPATH" -volname "$VOL_NAME" -fs HFS+J -format UDSB -encryption "$ENCRYPT_CHOICE" -pubkey "$SKID_ROW" -ov "$TARGET_PARENT/$DMG_NAME" 2>&1)
+				CREATE=$(/usr/bin/hdiutil create -srcfolder "$FILEPATH" -volname "$VOL_NAME" -fs HFS+J -format UDSB -size "$MAX_SIZE"g -encryption "$ENCRYPT_CHOICE" -pubkey "$SKID_ROW" -ov "$TARGET_PARENT/$DMG_NAME" 2>&1)
 			elif [[ "$METHOD" == "all" ]] ; then
-				CREATE=$(echo -n "$PASSPHRASE" | /usr/bin/hdiutil create -srcfolder "$FILEPATH" -volname "$VOL_NAME" -fs HFS+J -format UDSB -encryption "$ENCRYPT_CHOICE" -stdinpass -pubkey "$SKID_ROW" -ov "$TARGET_PARENT/$DMG_NAME" 2>&1)
+				CREATE=$(echo -n "$PASSPHRASE" | /usr/bin/hdiutil create -srcfolder "$FILEPATH" -volname "$VOL_NAME" -fs HFS+J -format UDSB -size "$MAX_SIZE"g -encryption "$ENCRYPT_CHOICE" -stdinpass -pubkey "$SKID_ROW" -ov "$TARGET_PARENT/$DMG_NAME" 2>&1)
 			fi
 		fi
 	fi
