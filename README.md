@@ -40,29 +40,30 @@ Because DiMaGo uses the macOS Notification Center, the minimum Mac OS requiremen
 Only necessary if for some reason you want to run this from the shell or another shell script.
 
 ## Functionality
-* creates read-only DMGs or read/write sparsebundles from a source folder
+* creates two types of disk images, read-only DMGs or read/write sparsebundles, from a source folder
+* creates unencrypted or encrypted disk images
 * encrypts with AES-256 or AES-128
-* encrypts using a password
+* encrypts using a password (**less secure**)
 * encrypts using public S/MIME keys available in the user's keychains
 * encrypts using both password and public S/MIME keys (**less secure**)
 * encrypts using multiple public S/MIME keys for collaboration scenarios
 * ignores expired S/MIME certificates
 * ignores S/MIME-compatible CA certificates (end entities only)
 * generates strong random passwords using `openssl` in addition to manual password input
-* codesigns the images after creation
-* codesigns existing unsigned images
-* re-codesigns existing codesigned images
-* generates a SHA-2 256-bit checksum
+* codesigns the disk images after creation, including sparsebundles
+* codesigns existing unsigned disk images
+* re-codesigns existing codesigned disk images
+* generates a SHA-2 256-bit checksum (DMGs only)
 * automatically splits DMGs larger than 200 MB, if the user has installed `gsplit` while keeping the original image file
 * creates its own DiMaGo keychain in the userspace, accessible via macOS **Keychain Access**
 * stores UUIDs, passwords, SHA-256 checksums, S/MIME information (email addresses & SKIDs) in discrete DiMaGo keychain entries
 
-## Planned Functionality
+## Planned Functionality (this might take a while)
 * preferences for image creation: volume icon, background image etc. (DMGs only)
 * **second workflow/script to verify and trust certificates used to codesign**
-* write valid public S/MIME keys to preferences, with option to rescan
+* write email addresses and SKIDs of existing valid public S/MIME keys to preferences, with option to rescan
 
 ## General Notes
 * **DiMaGo** only uses native macOS command line programs. Further options are available with `gsplit` (segment large DMGs) and `terminal-notifier` (extended notifications).
-* To codesign a DMG or sparsebundle, you need a Code Signing Certificate (CSC), which you can get as an Apple Developer or issue yourself using **Keychain Access** or third-party applications like **[xca](https://sourceforge.net/projects/xca/)**
+* To codesign a DMG or sparsebundle, you need a Code Signing Certificate (CSC), which you can get as an Apple Developer or issue yourself using **Keychain Access** or third-party applications like **[xca](https://sourceforge.net/projects/xca/)**.
 * Cross-platform compatibility hasn't been tested. Encrypted macOS images can be opened/mounted on Windows (using e.g. **7-zip**) and on Linux systems, but whether this also works with S/MIME-encrypted images remains to be seen.
