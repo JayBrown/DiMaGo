@@ -41,6 +41,8 @@ Only necessary if for some reason you want to run this from the shell or another
 
 ## Functionality
 * creates two types of disk images, read-only DMGs or read/write sparsebundles, from a source folder
+* asks user for disk image's volume name and basename
+* asks user for maximum sparsebundle volume size (default: 5 GB; minimum: 1 GB)
 * creates unencrypted or encrypted disk images
 * encrypts with AES-256 or AES-128
 * encrypts using a password (**less secure**)
