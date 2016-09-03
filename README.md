@@ -61,11 +61,17 @@ Only necessary if for some reason you want to run this from the shell or another
 * stores UUIDs, passwords, SHA-256 checksums, S/MIME information (email addresses & SKIDs) in discrete DiMaGo keychain entries
 
 ## Planned Functionality (this might take a while)
+* write email addresses and SKIDs of existing valid public S/MIME keys to preferences, with option to rescan
+* if there are no S/MIME identities in the user's keychains, use `openssl` to create an S/MIME certificate, and store it in the login.keychain for local encryption operations
 * preferences for image creation: volume icon, background image etc. (DMGs only)
 * **second workflow/script to verify and trust certificates used to codesign**
-* write email addresses and SKIDs of existing valid public S/MIME keys to preferences, with option to rescan
+* research `hdiutil` options `-cacert`, and `-certificate` plus `-recover`
+* **third workflow/script to convert existing disk images**
 
 ## General Notes
+* You can get trusted one-year S/MIME certificates for free at [Comodo](https://www.comodo.com/home/email-security/free-email-certificate.php), but you can also self-issue an S/MIME certificate, either with macOS **Keychain Access** or third-party CAs like **[xca](https://sourceforge.net/projects/xca/)**.
+* When self-issuing/signing S/MIME certificates, make sure that the leaf certificate contains a **Subject Key Identifier** (SKID); otherwise it will not be compatible with `hdiutil` and **DiMaGo**.
+* If you have received an email signed with a public S/MIME key, it is stored in your keychain automatically (trusted certificates) or after you manually set the trust (self-issued/signed certificates), and then you can then encrypt a disk image using that public key.
+* To codesign a DMG or sparsebundle, you need a Code Signing Certificate (CSC), which you can get as an Apple Developer or issue yourself using **Keychain Access** or third-party CAs like the above-mentioned **xca**.
 * **DiMaGo** only uses native macOS command line programs. Further options are available with `gsplit` (segment large DMGs) and `terminal-notifier` (extended notifications).
-* To codesign a DMG or sparsebundle, you need a Code Signing Certificate (CSC), which you can get as an Apple Developer or issue yourself using **Keychain Access** or third-party applications like **[xca](https://sourceforge.net/projects/xca/)**.
 * Cross-platform compatibility hasn't been tested. Encrypted macOS images can be opened/mounted on Windows (using e.g. **7-zip**) and on Linux systems, but whether this also works with S/MIME-encrypted images remains to be seen.
