@@ -9,7 +9,7 @@
 
 If you encrypt a DMG or sparsebundle with a public S/MIME key, only a user in possession of the private key will be able to access the image contents. This is great against wordlist attacks, or for hiding content e.g. in the cloud without the use of other tools like **Boxcryptor** or **Cryptomator**. You can also use multiple S/MIME keys, if more than one person needs to have access to the image contents.
 
-In essence, **DiMaGo** is the rebirth of the [**PGPdisk** of olde](https://en.wikipedia.org/wiki/PGPDisk), only with S/MIME instead of PGP/GPG encryption.
+In essence, **DiMaGo** facilitates the rebirth of the [**PGPdisk** of olde](https://en.wikipedia.org/wiki/PGPDisk), only with S/MIME instead of PGP/GPG encryption.
 
 ## Current status
 Beta: it works (apparently), but it will remain in beta status until the DiMaGo verification script/workflow has been created
@@ -42,21 +42,21 @@ Only necessary if for some reason you want to run this from the shell or another
 ## Functionality
 * creates two types of disk images, read-only DMGs or read/write sparsebundles, from a source folder
 * asks user for disk image's volume name and basename
-* asks user for maximum sparsebundle volume size (default: 5 GB; minimum: 1 GB)
+* asks user for sparsebundle's virtual volume size (default: 5 GB; minimum: 1 GB)
 * creates unencrypted or encrypted disk images
-* encrypts with AES-256 or AES-128
-* encrypts using a password (**less secure**)
-* encrypts using public S/MIME keys available in the user's keychains
-* encrypts using both password and public S/MIME keys (**less secure**)
-* encrypts using multiple public S/MIME keys for collaboration scenarios
+* encrypts with AES-256 (**more secure**) or AES-128 (**less secure**)
+* encrypts using a passphrase (**less secure**)
+* encrypts using public S/MIME key(s) available in the user's keychains (**more secure**)
+* encrypts using both passphrase and public S/MIME keys (**less secure**)
+* encrypts using multiple public S/MIME keys for collaboration scenarios, e.g. with sparsebundles in the cloud
 * ignores expired S/MIME certificates
 * ignores S/MIME-compatible CA certificates (end entities only)
-* generates strong random passwords using `openssl` in addition to manual password input
-* codesigns the disk images after creation, including sparsebundles
-* codesigns existing unsigned disk images
-* re-codesigns existing codesigned disk images
+* generates strong random passphrases using `openssl` in addition to manual passphrase input
+* codesigns the disk images after creation, including sparsebundles (CSC required)
+* codesigns existing unsigned disk images (CSC required)
+* re-codesigns existing codesigned disk images (CSC required)
 * generates a SHA-2 256-bit checksum (DMGs only)
-* automatically splits DMGs larger than 200 MB, if the user has installed `gsplit` while keeping the original image file
+* automatically splits DMGs larger than 200 MB while retaining the original disk image file (`gsplit` required)
 * creates its own DiMaGo keychain in the userspace, accessible via macOS **Keychain Access**
 * stores UUIDs, passwords, SHA-256 checksums, S/MIME information (email addresses & SKIDs) in discrete DiMaGo keychain entries
 
