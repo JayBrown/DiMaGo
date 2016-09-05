@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# DiMaGo v1.0.2 (beta)
+# DiMaGo v1.0.3 (beta)
 # DiMaGo ➤ Create (shell script version)
 #
 # Note: DiMaGo will remain in beta status until DiMaGo ➤ Verify has been scripted
@@ -8,7 +8,7 @@
 LANG=en_US.UTF-8
 export PATH=/usr/local/bin:$PATH
 ACCOUNT=$(/usr/bin/id -un)
-CURRENT_VERSION="1.02"
+CURRENT_VERSION="1.03"
 
 # check compatibility
 MACOS2NO=$(/usr/bin/sw_vers -productVersion | /usr/bin/awk -F. '{print $2}')
@@ -28,10 +28,16 @@ EOT)
 	exit
 fi
 
+
+
 # notification function
 notify () {
  	if [[ "$NOTESTATUS" == "osa" ]] ; then
-		/usr/bin/osascript -e 'display notification "$2" with title "DiMaGo [$ACCOUNT]" subtitle "$1"' &>/dev/null
+		/usr/bin/osascript &>/dev/null << EOT
+tell application "System Events"
+	display notification "$2" with title "DiMaGo [" & "$ACCOUNT" & "]" subtitle "$1"
+end tell
+EOT
 	elif [[ "$NOTESTATUS" == "tn" ]] ; then
 		"$TERMNOTE_LOC/Contents/MacOS/terminal-notifier" \
 			-title "DiMaGo [$ACCOUNT]" \
@@ -467,12 +473,12 @@ if (( $(echo "$NEWEST_VERSION > $CURRENT_VERSION" | /usr/bin/bc -l) )) ; then
 	/usr/bin/open "https://github.com/JayBrown/DiMaGo/releases/latest"
 fi
 
-for FILEPATH in "$1"
+for FILEPATH in "$1" # ALT: "$@"
 do
 
 TARGET_NAME=$(/usr/bin/basename "$FILEPATH")
 
-if [[ "$FILEPATH" == *".dmg" ]] || [[ "$FILEPATH" == *".sparsebundle" ]] || [[ "$FILEPATH" == *".sparseimage" ]] ; then # codesign or re-codesign image
+if [[ "$FILEPATH" == *".dmg" ]] || [[ "$FILEPATH" == *".sparsebundle" ]] || [[ "$FILEPATH" == *".sparseimage" ]] ; then # codesign or re-codesign disk image
 
 	# check for codesigning certificates in the user's keychains
 	notify "Please wait! Searching…" "Code signing certificates"
@@ -494,7 +500,7 @@ if [[ "$FILEPATH" == *".dmg" ]] || [[ "$FILEPATH" == *".sparsebundle" ]] || [[ "
 		exit
 	fi
 
-	# check for existing image code signature
+	# check for existing disk image code signature
 	CS_TEST=$(/usr/bin/codesign -dvvvv "$FILEPATH" 2>&1)
 	if [[ "$CS_TEST" == *"is not signed at all" ]] ; then
 		SIGN_INFO="codesign"
@@ -514,7 +520,7 @@ if [[ "$FILEPATH" == *".dmg" ]] || [[ "$FILEPATH" == *".sparsebundle" ]] || [[ "
 	DIALOG_TXT="File: $TARGET_NAME
 Leaf: $PREV_INFO
 
-Do you want to use $CERT_TEXT to $SIGN_INFO the image?"
+Do you want to use $CERT_TEXT to $SIGN_INFO the disk image?"
 	CS_CHOICE=$(/usr/bin/osascript 2>/dev/null << EOT
 tell application "System Events"
 	activate
@@ -570,7 +576,7 @@ EOT)
 		exit # ALT: continue
 	fi
 
-else # create image with DiMaGo
+else # create disk image with DiMaGo
 
 	# check if target is not a directory, or is a bundle
 	if [[ ! -d "$FILEPATH" ]] ; then
@@ -605,12 +611,12 @@ else # create image with DiMaGo
 		CS_ABLE="false"
 	fi
 
-	# select image type: dmg (read-only) or sparsebundle
+	# select disk image type: dmg (read-only) or sparsebundle
 	TYPE_CHOICE=$(/usr/bin/osascript 2>/dev/null << EOT
 tell application "System Events"
 	activate
 	set theLogoPath to ((path to library folder from user domain) as text) & "Caches:local.lcars.dimago:lcars.png"
-	set theType to button returned of (display dialog "Choose the type of image to create from \"$TARGET_NAME\". Sparsebundles are best for dynamic storage and collaboration, DMGs for file distribution." ¬
+	set theType to button returned of (display dialog "Choose the type of disk image to create from \"$TARGET_NAME\". Sparsebundles are best for dynamic storage and collaboration, DMGs for file distribution." ¬
 		buttons {"Cancel", "Read-Write Sparsebundle", "Read-Only DMG"} ¬
 		default button 3 ¬
 		with title "DiMaGo" ¬
@@ -633,7 +639,7 @@ EOT)
 tell application "System Events"
 	activate
 	set theLogoPath to ((path to library folder from user domain) as text) & "Caches:local.lcars.dimago:lcars.png"
-	set theVolumeName to text returned of (display dialog "Enter the volume name that will be displayed after you open the image file." ¬
+	set theVolumeName to text returned of (display dialog "Enter the volume name that will be displayed after you mount the disk image." ¬
 		default answer "$TARGET_NAME" ¬
 		buttons {"Cancel", "Enter"} ¬
 		default button 2 ¬
@@ -650,7 +656,7 @@ EOT)
 	# set maximum sparsebundle size in GB
 	if [[ "$TYPE" == "sparsebundle" ]] ; then
 		MAX_SIZE=""
-		# BREAKER="" # ALT: for workflow only
+		BREAKER=""
 		SIZE_RETURN=""
 		until [[ "$SIZE_RETURN" == "true" ]]
 		do
@@ -669,26 +675,26 @@ end tell
 theMaximumSize
 EOT)
 			if [[ "$SIZE_INPUT" == "false" ]] || [[ "$SIZE_INPUT" == "" ]] ; then
-				exit # ALT: BREAKER="true" && break
+				BREAKER="true"
+				SIZE_RETURN="true"
+				break
 			fi
 			case $SIZE_INPUT in
-				'' | '0' | *.* | *,* | */* | *+* | *-* | *'*'* | *.*.* | *[!0-9]*) notify "Error: false input \"$SIZE_INPUT\"" "Only integers of at least 1" && continue ;;
+				'' | '0' | *.* | *,* | */* | *+* | *-* | *'*'* | *.*.* | *[!0-9]*) notify "False input: $SIZE_INPUT" "Only integers of at least 1" && continue ;;
 				*) SIZE_RETURN="true" && MAX_SIZE="$SIZE_INPUT" && continue ;;
 			esac
 		done
 	fi
-
-	# ALT: only for workflow
-	# if [[ "$BREAKER" == "true" ]] ; then
-	#	continue
-	# fi
+	if [[ "$BREAKER" == "true" ]] ; then
+		exit # ALT: continue
+	fi
 
 	# choose encryption
 	ENCRYPT_CHOICE=$(/usr/bin/osascript 2>/dev/null << EOT
 tell application "System Events"
 	activate
 	set theLogoPath to ((path to library folder from user domain) as text) & "Caches:local.lcars.dimago:lcars.png"
-	set theEncryption to button returned of (display dialog "Do you want to encrypt the image?" ¬
+	set theEncryption to button returned of (display dialog "Do you want to encrypt the disk image?" ¬
 		buttons {"No", "AES-128", "AES-256"} ¬
 		default button 3 ¬
 		with title "DiMaGo" ¬
@@ -781,7 +787,7 @@ $LINE"
 		else
 			KEY_RETURN="true"
 
-			# select email address(es) to encrypt image
+			# select email address(es) to encrypt disk image
 			ALL_SMIME=$(echo "$CERT_DIGEST" | /usr/bin/awk -F":::" '{print $1}')
 			KEY_ADDR=$(/usr/bin/osascript 2>/dev/null << EOT
 tell application "System Events"
@@ -792,7 +798,7 @@ tell application "System Events"
 		set theList to theList & {(anItem) as string}
 	end repeat
 	set AppleScript's text item delimiters to return & linefeed
-	set theResult to choose from list theList with prompt "Choose the email address(es). The public key(s) will be used to encrypt the image." with title "DiMaGo" OK button name "Select" cancel button name "Cancel" with multiple selections allowed
+	set theResult to choose from list theList with prompt "Choose the email address(es). The public key(s) will be used to encrypt the disk image." with title "DiMaGo" OK button name "Select" cancel button name "Cancel" with multiple selections allowed
 	set AppleScript's text item delimiters to ""
 end tell
 theResult
@@ -831,7 +837,7 @@ $FINAL_SKID
 tell application "System Events"
 	activate
 	set theLogoPath to ((path to library folder from user domain) as text) & "Caches:local.lcars.dimago:lcars.png"
-	set {thePassword, theButton} to {text returned, button returned} of (display dialog "Enter the encryption password for the image, or choose to create a random password. The password will be stored in your DiMaGo keychain." ¬
+	set {thePassword, theButton} to {text returned, button returned} of (display dialog "Enter the encryption password for the disk image, or choose to create a random password. The password will be stored in your DiMaGo keychain." ¬
 		with hidden answer ¬
 		default answer "" ¬
 		buttons {"Cancel", "Random", "Enter"} ¬
@@ -854,12 +860,17 @@ EOT)
 		fi
 	fi
 
-	# enter image filename
-	DMG_NAME=$(/usr/bin/osascript 2>/dev/null << EOT
+	# enter image basename
+	TARGET_PARENT=$(/usr/bin/dirname "$FILEPATH")
+	OV_RETURN=""
+	BREAKER=""
+	until [[ "$OV_RETURN" == "true" ]]
+	do
+		DMG_NAME=$(/usr/bin/osascript 2>/dev/null << EOT
 tell application "System Events"
 	activate
 	set theLogoPath to ((path to library folder from user domain) as text) & "Caches:local.lcars.dimago:lcars.png"
-	set theVolumeName to text returned of (display dialog "Enter the image's filename." ¬
+	set theBaseName to text returned of (display dialog "Enter the disk image's basename." ¬
 		default answer "$TARGET_NAME.$TYPE" ¬
 		buttons {"Cancel", "Enter"} ¬
 		default button 2 ¬
@@ -867,39 +878,69 @@ tell application "System Events"
 		with icon file theLogoPath ¬
 		giving up after 180)
 end tell
-theVolumeName
+theBaseName
 EOT)
-	if [[ "$DMG_NAME" == "" ]] || [[ "$DMG_NAME" == "false" ]] ; then
+		if [[ "$DMG_NAME" == "" ]] || [[ "$DMG_NAME" == "false" ]] ; then
+			BREAKER="true"
+			OV_RETURN="true"
+			break
+		fi
+		if [[ "$DMG_NAME" != *".$TYPE" ]] ; then
+			DMG_NAME="$DMG_NAME.$TYPE"
+		fi
+		if [[ -e "$TARGET_PARENT/$DMG_NAME" ]] ; then
+			OV_CHOICE=$(/usr/bin/osascript 2>/dev/null << EOT
+tell application "System Events"
+	activate
+	set theLogoPath to ((path to library folder from user domain) as text) & "Caches:local.lcars.dimago:lcars.png"
+	set theOverwrite to button returned of (display dialog "A disk image named $DMG_NAME already exists in your destination folder. Do you want to replace it with the one you're creating, or do you want to rename the new disk image? " ¬
+		buttons {"Cancel", "Rename", "Replace"} ¬
+		with title "DiMaGo" ¬
+		with icon file theLogoPath ¬
+		giving up after 180)
+end tell
+theOverwrite
+EOT)
+			if [[ "$OV_CHOICE" == "Replace" ]] ; then
+				OV_RETURN="true"
+			elif [[ "$OV_CHOICE" == "Rename" ]] ; then
+				OV_RETURN=""
+			else
+				BREAKER="true"
+				OV_RETURN="true"
+			fi
+		else
+			OV_RETURN="true"
+		fi
+	done
+	if [[ "$BREAKER" == "true" ]] ; then
 		exit # ALT: continue
-	fi
-	if [[ "$DMG_NAME" != *".$TYPE" ]] ; then
-		DMG_NAME="$DMG_NAME.$TYPE"
 	fi
 
 	# create DMG or sparsebundle
-	TARGET_PARENT=$(/usr/bin/dirname "$FILEPATH")
+	notify "Please wait!" "Generating disk image…"
 	if [[ "$TYPE" == "dmg" ]] ; then
 		if [[ "$ENCRYPT" == "false" ]] ; then
-			CREATE=$(/usr/bin/hdiutil create -srcfolder "$FILEPATH" -volname "$VOL_NAME" -fs HFS+ -fsargs "-c c=64,a=16,e=16" -nospotlight -format UDBZ -ov "$TARGET_PARENT/$DMG_NAME" 2>&1)
+			CREATE=$(/usr/bin/hdiutil create -srcfolder "$FILEPATH" -volname "$VOL_NAME" -layout GPTSPUD -fs HFS+ -fsargs "-c c=64,a=16,e=16" -nospotlight -format UDBZ -ov "$TARGET_PARENT/$DMG_NAME" 2>&1)
 		elif [[ "$ENCRYPT" == "true" ]] ; then
 			if [[ "$METHOD" == "pw" ]] ; then
-				CREATE=$(echo -n "$PASSPHRASE" | /usr/bin/hdiutil create -srcfolder "$FILEPATH" -volname "$VOL_NAME" -fs HFS+ -fsargs "-c c=64,a=16,e=16" -nospotlight -format UDBZ -encryption "$ENCRYPT_CHOICE" -stdinpass -ov "$TARGET_PARENT/$DMG_NAME" 2>&1)
+				CREATE=$(echo -n "$PASSPHRASE" | /usr/bin/hdiutil create -srcfolder "$FILEPATH" -volname "$VOL_NAME" -layout GPTSPUD -fs HFS+ -fsargs "-c c=64,a=16,e=16" -nospotlight -format UDBZ -encryption "$ENCRYPT_CHOICE" -stdinpass -ov "$TARGET_PARENT/$DMG_NAME" 2>&1)
 			elif [[ "$METHOD" == "key" ]] ; then
-				CREATE=$(/usr/bin/hdiutil create -srcfolder "$FILEPATH" -volname "$VOL_NAME" -fs HFS+ -fsargs "-c c=64,a=16,e=16" -nospotlight -format UDBZ -encryption "$ENCRYPT_CHOICE" -pubkey "$SKID_ROW" -ov "$TARGET_PARENT/$DMG_NAME" 2>&1)
+				CREATE=$(/usr/bin/hdiutil create -srcfolder "$FILEPATH" -volname "$VOL_NAME" -layout GPTSPUD -fs HFS+ -fsargs "-c c=64,a=16,e=16" -nospotlight -format UDBZ -encryption "$ENCRYPT_CHOICE" -pubkey "$SKID_ROW" -ov "$TARGET_PARENT/$DMG_NAME" 2>&1)
 			elif [[ "$METHOD" == "all" ]] ; then
-				CREATE=$(echo -n "$PASSPHRASE" | /usr/bin/hdiutil create -srcfolder "$FILEPATH" -volname "$VOL_NAME" -fs HFS+ -fsargs "-c c=64,a=16,e=16" -nospotlight -format UDBZ -encryption "$ENCRYPT_CHOICE" -stdinpass -pubkey "$SKID_ROW" -ov "$TARGET_PARENT/$DMG_NAME" 2>&1)
+				CREATE=$(echo -n "$PASSPHRASE" | /usr/bin/hdiutil create -srcfolder "$FILEPATH" -volname "$VOL_NAME" -layout GPTSPUD -fs HFS+ -fsargs "-c c=64,a=16,e=16" -nospotlight -format UDBZ -encryption "$ENCRYPT_CHOICE" -stdinpass -pubkey "$SKID_ROW" -ov "$TARGET_PARENT/$DMG_NAME" 2>&1)
 			fi
 		fi
 	elif [[ "$TYPE" == "sparsebundle" ]] ; then
 		if [[ "$ENCRYPT" == "false" ]] ; then
-			CREATE=$(/usr/bin/hdiutil create -srcfolder "$FILEPATH" -volname "$VOL_NAME" -fs HFS+J -format UDSB -size "$MAX_SIZE"g -ov "$TARGET_PARENT/$DMG_NAME" 2>&1)
+			CREATE=$(/usr/bin/hdiutil create -srcfolder "$FILEPATH" -volname "$VOL_NAME" -layout GPTSPUD -fs HFS+J -format UDSB -size "$MAX_SIZE"g -ov "$TARGET_PARENT/$DMG_NAME" 2>&1)
 		elif [[ "$ENCRYPT" == "true" ]] ; then
 			if [[ "$METHOD" == "pw" ]] ; then
-				CREATE=$(echo -n "$PASSPHRASE" | /usr/bin/hdiutil create -srcfolder "$FILEPATH" -volname "$VOL_NAME" -fs HFS+J -format UDSB -size "$MAX_SIZE"g -encryption "$ENCRYPT_CHOICE" -stdinpass -ov "$TARGET_PARENT/$DMG_NAME" 2>&1)
+				CREATE=$(echo -n "$PASSPHRASE" | /usr/bin/hdiutil create -srcfolder "$FILEPATH" -volname "$VOL_NAME" -layout GPTSPUD -fs HFS+J -format UDSB -size "$MAX_SIZE"g -encryption "$ENCRYPT_CHOICE" -stdinpass -ov "$TARGET_PARENT/$DMG_NAME" 2>&1)
 			elif [[ "$METHOD" == "key" ]] ; then
-				CREATE=$(/usr/bin/hdiutil create -srcfolder "$FILEPATH" -volname "$VOL_NAME" -fs HFS+J -format UDSB -size "$MAX_SIZE"g -encryption "$ENCRYPT_CHOICE" -pubkey "$SKID_ROW" -ov "$TARGET_PARENT/$DMG_NAME" 2>&1)
+				CREATE=$(/usr/bin/hdiutil create -srcfolder "$FILEPATH" -volname "$VOL_NAME" -layout GPTSPUD -fs HFS+J -format UDSB -size "$MAX_SIZE"g -encryption "$ENCRYPT_CHOICE" -pubkey "$SKID_ROW" -ov "$TARGET_PARENT/$DMG_NAME" 2>&1)
 			elif [[ "$METHOD" == "all" ]] ; then
-				CREATE=$(echo -n "$PASSPHRASE" | /usr/bin/hdiutil create -srcfolder "$FILEPATH" -volname "$VOL_NAME" -fs HFS+J -format UDSB -size "$MAX_SIZE"g -encryption "$ENCRYPT_CHOICE" -stdinpass -pubkey "$SKID_ROW" -ov "$TARGET_PARENT/$DMG_NAME" 2>&1)
+				CREATE=$(echo -n "$PASSPHRASE" | /usr/bin/hdiutil create -srcfolder "$FILEPATH" -volname "$VOL_NAME" -layout GPTSPUD -fs HFS+J -format UDSB -size "$MAX_SIZE"g -encryption "$ENCRYPT_CHOICE" -stdinpass -pubkey "$SKID_ROW" -ov "$TARGET_PARENT/$DMG_NAME" 2>&1)
 			fi
 		fi
 	fi
@@ -907,7 +948,7 @@ EOT)
 	# creation successful?
 	echo "$CREATE"
 	if [[ $(echo "$CREATE" | /usr/bin/grep "hdiutil: create failed") != "" ]] ; then
-		notify "Error creating image" "$DMG_NAME"
+		notify "Error creating disk image" "$DMG_NAME"
 		exit # ALT: continue
 	elif [[ $(echo "$CREATE" | /usr/bin/grep "Certificate not found") != "" ]] ; then
 		notify "Error: certificate not found" "$MAIL_ADDR"
@@ -962,13 +1003,13 @@ $ENCRYPT_INFO"
 	# ask user to codesign DMG (only if the keychain contains CSCs)
 	if [[ "$CS_ABLE" == "true" ]] ; then
 		if [[ "$CS_MULTI" == "false" ]] ; then
-			CERT_TEXT="use your identity '$CERTS'"
+			CERT_TEXT="use your identity $CERTS"
 		elif [[ "$CS_MULTI" == "true" ]] ; then
 			CERT_TEXT="use one of your identities"
 		else
 			CERT_TEXT=""
 		fi
-		DIALOG_TXT="Do you want to $CERT_TEXT to codesign the image $DMG_NAME?"
+		DIALOG_TXT="Do you want to $CERT_TEXT to codesign the disk image $DMG_NAME?"
 		CS_CHOICE=$(/usr/bin/osascript 2>/dev/null << EOT
 tell application "System Events"
 	activate
