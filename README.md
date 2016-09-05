@@ -57,6 +57,7 @@ Only necessary if for some reason you want to run this from the shell or another
 * encrypts using multiple public S/MIME keys for collaboration scenarios, e.g. with sparsebundles in the cloud
 * ignores expired S/MIME certificates
 * ignores S/MIME-compatible CA certificates (end entities only)
+* creates self-signed root S/MIME certificate if the keychains don't contain any valid public S/MIME keys
 * generates strong random passphrases using `openssl` in addition to manual passphrase input
 * codesigns the disk images after creation, including sparsebundles (CSC required)
 * codesigns existing unsigned disk images (CSC required)
@@ -68,7 +69,6 @@ Only necessary if for some reason you want to run this from the shell or another
 
 ## Planned Functionality (this might take a while)
 * write email addresses and SKIDs of existing valid public S/MIME keys to preferences, with option to rescan
-* if there are no S/MIME identities in the user's keychains, use `openssl` to create an S/MIME certificate, and store it in the login.keychain for local encryption operations
 * preferences for disk image creation: volume icon, background image etc. (DMGs only)
 * **second workflow/script to verify and trust certificates used to codesign**
 * research `hdiutil` options `-cacert`, and `-certificate` plus `-recover`
@@ -77,6 +77,7 @@ Only necessary if for some reason you want to run this from the shell or another
 ## General Notes
 * You can get trusted S/MIME certificates for free at [Comodo](https://www.comodo.com/home/email-security/free-email-certificate.php) (valid for one-year) or using the [Volksverschlüsselung](https://volksverschluesselung.de) (two years), but you can also self-issue an S/MIME certificate, either with macOS **Keychain Access** or third-party CAs like **[xca](https://sourceforge.net/projects/xca/)**.
 * When self-issuing/signing S/MIME certificates, make sure that the leaf certificate contains a **Subject Key Identifier** (SKID); otherwise it will not be compatible with `hdiutil` and **DiMaGo**.
+* If DiMaGo doesn't find any valid public S/MIME keys, it will ask the user to create a self-signed root S/MIME certificate (for local disk image encryption only).
 * Self-signed or self-issued certificates will not be deemed "trusted" by the powers that be (incl. macOS), but the major advantage is that (as with PGP/GPG) you can simply ignore the powers that be. There is no third party involved: only the sender and the recipient(s) need to trust each other, and trust each other's certificates, and they only need to do it once. So self-signed certificates are (like PGP/GPG) *always* the better option. (They don't even need to include a valid email address, unless you actually want to use them for email message signing and protection as well.)
 * If you have received an email signed with a public S/MIME key, it is stored in your keychain automatically (trusted certificates) or after you manually set the trust (self-issued/signed certificates), and then you can encrypt a disk image using that public key.
 * To codesign a DMG or sparsebundle, you need a Code Signing Certificate (CSC), which you can get as an Apple Developer or issue yourself using **Keychain Access** or third-party CAs like the above-mentioned **xca**.
