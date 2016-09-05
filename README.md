@@ -20,7 +20,7 @@ Such a master–slave setup is also great for corporate settings, e.g. if a syst
 ## Current status
 Beta: it works (apparently), but it will remain in beta status until the DiMaGo verification script/workflow has been created
 
-## Prerequisites
+## Prerequisites for full functionality [optional]
 Install using [Homebrew](http://brew.sh) with `brew install <software-name>` (or with a similar manager)
 
 * [coreutils](https://www.gnu.org/software/coreutils) [Note: DiMaGo uses **GNU split** to segment DMGs]
