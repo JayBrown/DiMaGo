@@ -7,9 +7,15 @@
 # DiMaGo <img src="https://github.com/JayBrown/DiMaGo/blob/master/img/jb-img.png" height="20px"/>
 **macOS workflows and shell scripts to create disk images (DMGs and sparsebundles) with special focus on InfoSec, namely using S/MIME encryption**
 
+In essence, **DiMaGo** facilitates the rebirth of the [**PGPdisk** of olde](https://en.wikipedia.org/wiki/PGPDisk), only with S/MIME instead of PGP/GPG encryption.
+
 If you encrypt a DMG or sparsebundle with a public S/MIME key, only a user in possession of the private key will be able to access the image contents. This is great against wordlist attacks, or for hiding content e.g. in the cloud without the use of other tools like **Boxcryptor** or **Cryptomator**. You can also use multiple S/MIME keys, if more than one person needs to have access to the image contents.
 
-In essence, **DiMaGo** facilitates the rebirth of the [**PGPdisk** of olde](https://en.wikipedia.org/wiki/PGPDisk), only with S/MIME instead of PGP/GPG encryption.
+As with S/MIME-encrypted email messages, if an S/MIME certificate used to encrypt a disk image expires, you will still be able to open the encrypted volume, as long as you do not delete the expired certificate from your keychain.
+
+S/MIME protection of images will not help you if you're compelled to reveal the contents of your computer. In these cases, once you've provided authorities with the macOS login password, your keychains are unlocked (at least with default settings), and so are your encrypted volumes, once an agent clicks on them, whether you have activated password or S/MIME encryption. (DiMaGo also stores disk image passwords in your keychain for auto-open.) You can easily evade this problem if you create a disk image encrypted with both S/MIME and a password, but on a *different* Mac. The keychain on this master Macintosh will then contain the S/MIME certificate chain and the passphrase. Then all you need to do is copy the disk image (e.g. a sparsebundle) to your main Mac (slave Macintosh), where you will only use the passphrase to mount the encrypted volume. Just be sure that you do not store the disk image password in the keychain of your slave Macintosh, because that would defeat the purpose.
+
+Such a master-slave setup is also great for corporate settings, if e.g. a system administrator wants to provide employees with an encrypted read-write sparsebundle; in most cases the passphrase is only known to the employee, which he has to type in himself, but the admin will still have a recovery option using the admin S/MIME key on his own computer.
 
 ## Current status
 Beta: it works (apparently), but it will remain in beta status until the DiMaGo verification script/workflow has been created
@@ -69,9 +75,10 @@ Only necessary if for some reason you want to run this from the shell or another
 * **third workflow/script to convert existing disk images**
 
 ## General Notes
-* You can get trusted one-year S/MIME certificates for free at [Comodo](https://www.comodo.com/home/email-security/free-email-certificate.php), but you can also self-issue an S/MIME certificate, either with macOS **Keychain Access** or third-party CAs like **[xca](https://sourceforge.net/projects/xca/)**.
+* You can get trusted one-year S/MIME certificates for free at [Comodo](https://www.comodo.com/home/email-security/free-email-certificate.php) or using the [Volksverschlüsselung](https://volksverschluesselung.de), but you can also self-issue an S/MIME certificate, either with macOS **Keychain Access** or third-party CAs like **[xca](https://sourceforge.net/projects/xca/)**.
 * When self-issuing/signing S/MIME certificates, make sure that the leaf certificate contains a **Subject Key Identifier** (SKID); otherwise it will not be compatible with `hdiutil` and **DiMaGo**.
-* If you have received an email signed with a public S/MIME key, it is stored in your keychain automatically (trusted certificates) or after you manually set the trust (self-issued/signed certificates), and then you can then encrypt a disk image using that public key.
+* Self-signed or self-issued certificates will not be deemed "trusted" by the powers that be (incl. macOS), but the major advantage is that (as with PGP/GPG) you can simply ignore the powers that be. There is no third party involved: only the sender and the recipient(s) need to trust each other, and trust each other's certificates, and they only need to do it once. So self-signed certificates are (like PGP/GPG) *always* the better option. (They don't even need to include a valid email address, unless you actually want to use them for email message signing and protection as well.)
+* If you have received an email signed with a public S/MIME key, it is stored in your keychain automatically (trusted certificates) or after you manually set the trust (self-issued/signed certificates), and then you can encrypt a disk image using that public key.
 * To codesign a DMG or sparsebundle, you need a Code Signing Certificate (CSC), which you can get as an Apple Developer or issue yourself using **Keychain Access** or third-party CAs like the above-mentioned **xca**.
 * **DiMaGo** only uses native macOS command line programs. Further options are available with `gsplit` (segment large DMGs) and `terminal-notifier` (extended notifications).
 * Cross-platform compatibility hasn't been tested. Encrypted macOS images can be opened/mounted on Windows (using e.g. **7-zip**) and on Linux systems, but whether this also works with S/MIME-encrypted images remains to be seen.
