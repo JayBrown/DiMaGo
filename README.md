@@ -9,7 +9,7 @@
 
 In essence, **DiMaGo** facilitates the rebirth of the [**PGPdisk** of olde](https://en.wikipedia.org/wiki/PGPDisk) for macOS, only with S/MIME instead of PGP/GPG encryption.
 
-If you encrypt a DMG or sparsebundle with a public S/MIME key, only a user in possession of the corresponding private key will be able to access the disk image contents. In most cases this is a better solution than password-based encryption, which is prone to wordlist attacks. It's also great for hiding content, e.g. in the cloud without the use of specialized tools like **Boxcryptor** or **Cryptomator**; and if hackers get a hold of your cloud password, at least your data will still be safe. You can also use multiple S/MIME keys, if more than one person needs to have access to the disk image contents—perfect for team work.
+If you encrypt a DMG or sparsebundle with a public S/MIME key, only a user in possession of the corresponding private key will be able to access the disk image contents. In most cases this is a better solution than password-based encryption, which is prone to dictionary attacks (**Spartan** et al.). It's also great for hiding content, e.g. in the cloud without the use of specialized tools like **Boxcryptor** or **Cryptomator**; and if hackers get a hold of your cloud password, at least your data will still be safe. You can also use multiple S/MIME keys, if more than one person needs to have access to the disk image contents—perfect for team work.
 
 As with S/MIME-encrypted email messages, after an S/MIME certificate used to encrypt a disk image has expired, you will still be able to mount the encrypted volume, as long as you do not delete the expired certificate from your keychain.
 
