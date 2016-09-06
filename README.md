@@ -57,7 +57,7 @@ Only necessary if for some reason you want to run this from the shell or another
 * encrypts using multiple public S/MIME keys, e.g. for collaboration scenarios (team sparsebundles in the cloud etc.)
 * ignores expired S/MIME certificates
 * ignores S/MIME-compatible CA certificates (end entities only)
-* creates 4096-bit self-signed root S/MIME certificate using `openssl` if the user's keychains don't contain any valid public S/MIME keys
+* creates 4096-bit self-signed root S/MIME identity using `openssl` on first run (virtual email address)
 * generates strong random passphrases in addition to manual passphrase input
 * codesigns the disk images after creation, including sparsebundles (CSC required)
 * codesigns existing unsigned disk images (CSC required)
@@ -83,3 +83,6 @@ Only necessary if for some reason you want to run this from the shell or another
 * To codesign a DMG or sparsebundle, you need a Code Signing Certificate (CSC), which you can get as an Apple Developer or issue yourself using **Keychain Access** or third-party CAs like the above-mentioned **xca**.
 * **DiMaGo** only uses native macOS command line programs; further options are available with `gsplit` (segment large DMGs) and `terminal-notifier` (extended notifications).
 * Cross-platform compatibility has only been tested on Windows. **7-zip** can only open unencrypted DMGs. **HFSExplorer** can open encrypted DMGs and sparsebundles, but is currently not compatible with S/MIME-encrypted disk images. Mounting including write access for sparsebundles is not possible. Linux and BSD compatibility has not been tested.
+
+## Acknowledgments
+The idea for this worklflow/script came from reading [**Erik Antonsson**'s Caltech article](http://design.caltech.edu/erik/Misc/encrypted_virtual_disk.html) on public key encryption of sparseimages

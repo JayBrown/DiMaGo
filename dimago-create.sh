@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# DiMaGo v1.1.0 (beta)
+# DiMaGo v1.2.0 (beta)
 # DiMaGo ➤ Create (shell script version)
 #
 # Note: DiMaGo will remain in beta status until DiMaGo ➤ Verify has been scripted
@@ -8,7 +8,7 @@
 LANG=en_US.UTF-8
 export PATH=/usr/local/bin:$PATH
 ACCOUNT=$(/usr/bin/id -un)
-CURRENT_VERSION="1.10"
+CURRENT_VERSION="1.20"
 
 # check compatibility
 MACOS2NO=$(/usr/bin/sw_vers -productVersion | /usr/bin/awk -F. '{print $2}')
@@ -58,12 +58,13 @@ if [[ ! -e "$CERTS_TEMP" ]] ; then
 	touch "$CERTS_TEMP"
 fi
 
-# preferences (currently unused)
+# preferences
 PREFS_DIR="${HOME}/Library/Preferences/"
 PREFS="local.lcars.dimago"
 PREFS_FILE="$PREFS_DIR/$PREFS.plist"
 if [[ ! -e "$PREFS_FILE" ]] ; then
 	touch "$PREFS_FILE"
+	/usr/bin/defaults write "$PREFS" localIDCreate -bool NO
 fi
 
 # detect/create icon for terminal-notifier and osascript windows
@@ -460,6 +461,61 @@ if [[ "$CHAIN_INFO" == *"could not be found." ]] ; then
 	/usr/bin/security create-keychain -P DiMaGo.keychain && /usr/bin/security list-keychains -d user -s login.keychain DiMaGo.keychain && /usr/bin/security set-keychain-settings -u DiMaGo.keychain
 fi
 
+# first run: DiMaGo local S/MIME identity creation
+LOCAL_ID=$(/usr/bin/defaults read "$PREFS" localIDCreate 2>/dev/null)
+if [[ "$LOCAL_ID" != "1" ]] ; then
+
+	notify "Please wait! Generating…" "DiMaGo local S/MIME identity"
+
+	NK_TEMP="$CACHE_DIR/newkey~temp"
+	if [[ ! -e "$NK_TEMP" ]] ; then
+		mkdir -p "$NK_TEMP"
+	else
+		rm -rf "$NK_TEMP/"*
+	fi
+	touch "$NK_TEMP/dimago.cnf"
+	echo -n "" > "$NK_TEMP/dimago.cnf"
+	HOST_NAME=$(/bin/hostname)
+	if [[ "$HOST_NAME" != *".local" ]] ; then
+		HOST_NAME="$HOST_NAME.local"
+	fi
+	LK_PW=$(/usr/bin/openssl rand -base64 47 | /usr/bin/tr -d /=+ | /usr/bin/cut -c -32)
+	/usr/bin/security add-generic-password -U -D "application password" -l "DiMaGo private key pw" -s "DiMaGo private key pw" -a "$ACCOUNT" -w "$LK_PW" login.keychain
+	/usr/bin/openssl genrsa -des3 -passout pass:$LK_PW -out "$NK_TEMP/dimago.key" 4096
+	NC_COMMON="DiMaGo $ACCOUNT"
+	NC_ADDR="$ACCOUNT.DiMaGo@$HOST_NAME"
+
+	LEAF_CONF="[req]
+prompt=no
+distinguished_name=req_dn
+x509_extensions=x509_exts
+string_mask=utf8only
+
+[req_dn]
+commonName=$NC_COMMON
+emailAddress=$NC_ADDR
+
+[x509_exts]
+subjectKeyIdentifier=hash
+basicConstraints=critical, CA:FALSE
+keyUsage=critical, digitalSignature, keyEncipherment
+extendedKeyUsage=emailProtection"
+
+	echo "$LEAF_CONF" >> "$NK_TEMP/dimago.cnf"
+	/usr/bin/openssl req -x509 -days 7300 -config "$NK_TEMP/dimago.cnf" -new -key "$NK_TEMP/dimago.key" -passin pass:$LK_PW -sha512 -set_serial 47 -out "$NK_TEMP/dimago.pem" -outform PEM
+	EXPORT_PW=$(/usr/bin/openssl rand -base64 47 | /usr/bin/tr -d /=+ | /usr/bin/cut -c -32)
+	/usr/bin/security add-generic-password -U -D "application password" -l "DiMaGo cert export pw" -s "DiMaGo cert export pw" -a "$ACCOUNT" -w "$EXPORT_PW" login.keychain
+	/usr/bin/openssl pkcs12 -export -passout pass:$EXPORT_PW -out "$NK_TEMP/dimago.p12" -inkey "$NK_TEMP/dimago.key" -passin pass:$LK_PW -in "$NK_TEMP/dimago.pem"
+	/usr/bin/security import "$NK_TEMP/dimago.p12" -f pkcs12 -P "$EXPORT_PW" -k login.keychain
+	/usr/bin/security add-trusted-cert -r trustRoot -k login.keychain "$NK_TEMP/dimago.pem"
+
+	notify "Created S/MIME certificate" "$NC_ADDR"
+
+	rm -rf "$NK_TEMP"
+
+	/usr/bin/defaults write "$PREFS" localIDCreate -bool YES
+fi
+
 # check for update
 NEWEST_VERSION=$(/usr/bin/curl --silent https://api.github.com/repos/JayBrown/DiMaGo/releases/latest | /usr/bin/awk '/tag_name/ {print $2}' | xargs)
 if [[ "$NEWEST_VERSION" == "" ]] ; then
@@ -591,7 +647,7 @@ else # create disk image with DiMaGo
 
 	# remove .DS_Store file
 	if [[ -f "$FILEPATH/.DS_Store" ]] ; then
-    	rm -rf "$FILEPATH/.DS_Store"
+		rm -rf "$FILEPATH/.DS_Store"
 	fi
 
 	# check for codesigning certificates in the user's keychains
@@ -740,7 +796,7 @@ EOT)
 	if [[ "$ENCRYPT" == "true" ]] && [[ "$METHOD" != "pw" ]] && [[ "$METHOD" != "" ]] ; then
 
 		# search for valid S/MIME keys
-		notify "Please wait! Searching…" "Valid S/MIME certificates"
+		notify "Please wait! Searching…" "Valid public S/MIME keys"
 		ALL_CERTS=$(/usr/bin/security find-certificate -a -p 2>/dev/null)
 		RECORD=""
 		echo "$ALL_CERTS" | while IFS= read -r LINE
@@ -818,80 +874,6 @@ $FINAL_SKID
 				done
 				SKID_ROW=$(echo "$SKID_ROW" | /usr/bin/sed 's/,*$//g')
 			fi
-		fi
-	fi
-
-	# ask for key creation if no S/MIME are present
-	if [[ "$KEY_RETURN" == "false" ]] ; then
-		notify "Error: S/MIME" "No valid public keys"
-		NEWKEY=$(/usr/bin/osascript 2>/dev/null << EOT
-tell application "System Events"
-	activate
-	set theLogoPath to ((path to library folder from user domain) as text) & "Caches:local.lcars.dimago:lcars.png"
-	set theKeyChoice to button returned of (display dialog "There are no valid public S/MIME keys in your keychains. Do you want to create a new S/MIME certificate?" ¬
-		buttons {"No", "Yes"} ¬
-		default button 2 ¬
-		with title "DiMaGo" ¬
-		with icon file theLogoPath ¬
-		giving up after 180)
-end tell
-theKeyChoice
-EOT)
-		if [[ "$NEWKEY" == "No" ]] ; then
-			if [[ "$METHOD" == "key" ]] ; then
-				exit # ALT: continue
-			elif [[ "$METHOD" == "all" ]] ; then
-				notify "Error: missing S/MIME" "Now encrypting with password only"
-				METHOD="pw"
-			else
-				exit # ALT: continue
-			fi
-		elif [[ "$NEWKEY" == "Yes" ]] ; then # create new S/MIME certificate and write to login.keychain
-			notify "Please wait! Generating…" "Self-signed S/MIME certificate"
-			NK_TEMP="$CACHE_DIR/newkey~temp"
-			if [[ ! -e "$NK_TEMP" ]] ; then
-				mkdir -p "$NK_TEMP"
-			else
-				rm -rf "$NK_TEMP/"*
-			fi
-			touch "$NK_TEMP/dimago.cnf"
-			echo -n "" > "$NK_TEMP/dimago.cnf"
-			HOST_NAME=$(/bin/hostname)
-			if [[ "$HOST_NAME" != *".local" ]] ; then
-				HOST_NAME="$HOST_NAME.local"
-			fi
-			LK_PW=$(/usr/bin/openssl rand -base64 47 | /usr/bin/tr -d /=+ | /usr/bin/cut -c -32)
-			/usr/bin/security add-generic-password -U -D "application password" -l "DiMaGo private key pw" -s "DiMaGo private key pw" -a "$ACCOUNT" -w "$LK_PW" login.keychain
-			/usr/bin/openssl genrsa -des3 -passout pass:$LK_PW -out "$NK_TEMP/dimago.key" 4096
-			NC_COMMON="DiMaGo $ACCOUNT"
-			NC_ADDR="$ACCOUNT.DiMaGo@$HOST_NAME"
-			LEAF_CONF="[req]
-prompt=no
-distinguished_name=req_dn
-x509_extensions=x509_exts
-string_mask=utf8only
-
-[req_dn]
-commonName=$NC_COMMON
-emailAddress=$NC_ADDR
-
-[x509_exts]
-subjectKeyIdentifier=hash
-basicConstraints=critical, CA:FALSE
-keyUsage=critical, digitalSignature, keyEncipherment
-extendedKeyUsage=emailProtection"
-			echo "$LEAF_CONF" >> "$NK_TEMP/dimago.cnf"
-			/usr/bin/openssl req -x509 -days 7300 -config "$NK_TEMP/dimago.cnf" -new -key "$NK_TEMP/dimago.key" -passin pass:$LK_PW -sha512 -set_serial 47 -out "$NK_TEMP/dimago.pem" -outform PEM
-			EXPORT_PW=$(/usr/bin/openssl rand -base64 47 | /usr/bin/tr -d /=+ | /usr/bin/cut -c -32)
-			/usr/bin/security add-generic-password -U -D "application password" -l "DiMaGo cert export pw" -s "DiMaGo cert export pw" -a "$ACCOUNT" -w "$EXPORT_PW" login.keychain
-			/usr/bin/openssl pkcs12 -export -passout pass:$EXPORT_PW -out "$NK_TEMP/dimago.p12" -inkey "$NK_TEMP/dimago.key" -passin pass:$LK_PW -in "$NK_TEMP/dimago.pem"
-			/usr/bin/security import "$NK_TEMP/dimago.p12" -f pkcs12 -P "$EXPORT_PW" -k login.keychain
-			/usr/bin/security add-trusted-cert -r trustRoot -k login.keychain "$NK_TEMP/dimago.pem"
-			SKID_ROW=$(/usr/bin/security find-certificate -c "$NC_COMMON" | /usr/bin/grep "hpky" | /usr/bin/awk '{print $1;}' | /usr/bin/sed 's/^.*x//')
-			notify "Created certificate" "$NC_ADDR"
-			ENCRYPT_INFO="$NC_ADDR
-$SKID_ROW"
-			rm -rf "$NK_TEMP"
 		fi
 	fi
 
