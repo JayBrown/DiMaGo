@@ -13,7 +13,7 @@ If you encrypt a DMG or sparsebundle with a public S/MIME key, only a user in po
 
 As with S/MIME-encrypted email messages, after an S/MIME certificate used to encrypt a disk image has expired, you will still be able to mount the encrypted volume, as long as you do not delete the expired certificate from your keychain.
 
-S/MIME protection of disk images will not help you if you're compelled to reveal the contents of your computer. In these cases, once you've provided authorities with the macOS login password, your keychains are unlocked (at least with macOS default settings), and so are your encrypted volumes, once an agent clicks on them, whether you have encrypted by password or S/MIME or both. (This is because DiMaGo also stores disk image passwords in your keychain for auto-open.) You can easily evade this problem if you create a disk image encrypted with both S/MIME and a password, but on a *different* Mac. The keychain on this master Macintosh will then contain the S/MIME certificate chain and the passphrase. Then all you need to do is copy the disk image (e.g. a sparsebundle) sans certificate to your main Mac (slave Macintosh), where you are only to use the passphrase to mount the encrypted volume. Just be sure that you do not store the disk image password in the keychain of your slave Macintosh, because that would defeat the purpose.
+S/MIME protection of disk images will not help you if you're compelled to reveal the contents of your computer. In these cases, once you've provided authorities with the macOS login password, your keychains are unlocked (at least with macOS default settings), and so are your encrypted volumes, once an agent clicks on them, either because the public S/MIME encryption key is still in your login keychain, or because you have chosen to store the disk image passphrase in your DiMaGo keychain. You can easily evade this problem if you create a disk image encrypted with both S/MIME and a password, but on a *different* Mac. On this master Macintosh you can store the S/MIME certificate chain and (optionally) the passphrase in your DiMaGo keychain. Then all you need to do is copy the disk image sans certificate to your main Mac (slave Macintosh), where you are only to use the passphrase to mount the encrypted volume. Just be sure that you do not store the disk image password in the keychain of your slave Macintosh, because that would defeat the purpose.
 
 Such a master–slave setup is also great for corporate settings, e.g. if a system administrator wants to provide employees with an encrypted read-write sparsebundle; in most cases the passphrase is only known to the employee, which he has to type in himself, but the admin will still have a recovery option using the admin S/MIME key on his own computer. In an alternate approach for a corporate setting the admin can also create an S/MIME certificate chain for the employee, and keep a copy for himself.
 
@@ -59,13 +59,14 @@ Only necessary if for some reason you want to run this from the shell or another
 * ignores S/MIME-compatible CA certificates (end entities only)
 * creates 4096-bit self-signed root S/MIME identity using `openssl` on first run (virtual email address)
 * generates strong random passphrases in addition to manual passphrase input
+* asks whether the user also wants to store the encryption passphrase in the disk image's keychain entry
 * codesigns the disk images after creation, including sparsebundles (CSC required)
 * codesigns existing unsigned disk images (CSC required)
 * re-codesigns existing codesigned disk images (CSC required)
 * generates a SHA-2 256-bit checksum (DMGs only)
 * automatically splits DMGs larger than 200 MB while retaining the original disk image file (`gsplit` required)
 * creates its own DiMaGo keychain in the userspace, accessible via macOS **Keychain Access**
-* stores UUIDs, passwords, SHA-256 checksums, S/MIME information (email addresses & SKIDs) in discrete DiMaGo keychain entries
+* stores UUIDs, SHA-256 checksums, S/MIME information (email addresses & SKIDs), and (optionally) passwords in discrete DiMaGo keychain entries
 
 ## Planned Functionality (this might take a while)
 * write email addresses and SKIDs of existing valid public S/MIME keys to preferences, with option to rescan

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# DiMaGo v1.2.0 (beta)
+# DiMaGo v1.3.0 (beta)
 # DiMaGo ➤ Create (shell script version)
 #
 # Note: DiMaGo will remain in beta status until DiMaGo ➤ Verify has been scripted
@@ -8,7 +8,7 @@
 LANG=en_US.UTF-8
 export PATH=/usr/local/bin:$PATH
 ACCOUNT=$(/usr/bin/id -un)
-CURRENT_VERSION="1.20"
+CURRENT_VERSION="1.30"
 
 # check compatibility
 MACOS2NO=$(/usr/bin/sw_vers -productVersion | /usr/bin/awk -F. '{print $2}')
@@ -877,33 +877,69 @@ $FINAL_SKID
 		fi
 	fi
 
-	# choose password
+	# choose random password or input manually (double input)
 	if [[ "$ENCRYPT" == "true" ]] && [[ "$METHOD" != "key" ]] && [[ "$METHOD" != "" ]] ; then
-		PW_CHOICE=$(/usr/bin/osascript 2>/dev/null << EOT
+		PW_RETURN="false"
+		until [[ "$PW_RETURN" == "true" ]]
+		do
+			# first input or choose random
+			PW_CHOICE=$(/usr/bin/osascript 2>/dev/null << EOT
 tell application "System Events"
 	activate
 	set theLogoPath to ((path to library folder from user domain) as text) & "Caches:local.lcars.dimago:lcars.png"
-	set {thePassword, theButton} to {text returned, button returned} of (display dialog "Enter the encryption password for the disk image, or choose to create a random password. The password will be stored in your DiMaGo keychain." ¬
+	set {thePassword, theButton} to {text returned, button returned} of (display dialog "Enter the encryption passphrase for the disk image, or choose to create a random passphrase." ¬
 		with hidden answer ¬
 		default answer "" ¬
-		buttons {"Cancel", "Random", "Enter"} ¬
-		default button 3 ¬
+		buttons {"Random", "Enter"} ¬
+		default button 2 ¬
 		with title "DiMaGo" ¬
 		with icon file theLogoPath ¬
 		giving up after 180)
 end tell
 thePassword & "@DELIM@" & theButton
 EOT)
-		if [[ "$PW_CHOICE" == "" ]] || [[ "$PW_CHOICE" == "false" ]] || [[ "$PW_CHOICE" == "@DELIM@" ]] ; then
-			exit # ALT: continue
-		fi
-		PASSPHRASE=$(echo "$PW_CHOICE" | /usr/bin/awk -F"@DELIM@" '{print $1}')
-		BUTTON=$(echo "$PW_CHOICE" | /usr/bin/awk -F"@DELIM@" '{print $2}')
-		if [[ "$BUTTON" == "Random" ]] ; then # create random password
-			PASSPHRASE=$(/usr/bin/openssl rand -base64 47 | /usr/bin/tr -d /=+ | /usr/bin/cut -c -32)
-		elif [[ "$BUTTON" == "Enter" ]] && [[ "$PASSPHRASE" == "" ]] ; then
-			exit # ALT: continue
-		fi
+			BUTTON=$(echo "$PW_CHOICE" | /usr/bin/awk -F"@DELIM@" '{print $2}')
+			if [[ "$BUTTON" == "Random" ]] ; then # create random password
+				PW_GEN="true"
+				PASSPHRASE=$(/usr/bin/openssl rand -base64 47 | /usr/bin/tr -d /=+ | /usr/bin/cut -c -32)
+				PW_RETURN="true"
+				continue
+			fi
+			FIRST_PW=$(echo "$PW_CHOICE" | /usr/bin/awk -F"@DELIM@" '{print $1}')
+			if [[ "$BUTTON" == "Enter" ]] && [[ "$FIRST_PW" == "" ]] ; then
+				notify "Input error" "No passphrase"
+				continue
+			fi
+
+			# input a second time
+			SECOND_PW=$(/usr/bin/osascript 2>/dev/null << EOT
+tell application "System Events"
+	activate
+	set theLogoPath to ((path to library folder from user domain) as text) & "Caches:local.lcars.dimago:lcars.png"
+	set thePassword to text returned of (display dialog "Enter the encryption password again." ¬
+		with hidden answer ¬
+		default answer "" ¬
+		buttons {"Enter"} ¬
+		default button 1 ¬
+		with title "DiMaGo" ¬
+		with icon file theLogoPath ¬
+		giving up after 180)
+end tell
+thePassword
+EOT)
+			if [[ "$SECOND_PW" == "" ]] ; then
+				notify "Input error" "No passphrase"
+				continue
+			fi
+			if [[ "$SECOND_PW" == "$FIRST_PW" ]] ; then
+				PASSPHRASE="$SECOND_PW"
+				PW_RETURN="true"
+				continue
+			else
+				notify "Input error" "Passphrases don't match"
+				continue
+			fi
+		done
 	fi
 
 	# enter image basename
@@ -1004,9 +1040,6 @@ EOT)
 		exit # ALT: continue
 	else
 		notify "Image created" "$DMG_NAME"
-		if [[ "$METHOD" == "pw" ]] || [[ "$METHOD" == "all" ]] ; then
-			echo "$PASSPHRASE" | /usr/bin/pbcopy
-		fi
 	fi
 
 	# read UUID
@@ -1018,6 +1051,9 @@ EOT)
 	UUID=$(echo "$DMG_DUMP" | /usr/bin/grep "uuid:" | /usr/bin/awk -F": " '{print $2}')
 	if [[ "$UUID" == "" ]] ; then
 		UUID="$ACCOUNT"
+		UUID_INFO="n/a"
+	else
+		UUID_INFO="$UUID"
 	fi
 
 	# calculcate checksum (only for DMGs)
@@ -1031,19 +1067,67 @@ EOT)
 	if [[ "$ENCRYPT_INFO" == "" ]] ; then
 		ENCRYPT_INFO="none"
 	fi
-	COMMENT="SHA-256:
+	COMMENT="UUID:
+$UUID_INFO
+
+SHA-256:
 $FILESUM
 
 Public encryption keys:
 $ENCRYPT_INFO"
 
-	# add UUID and password or public key(s) or SHA2 checksum to DiMaGo keychain entry
+	# ask what to do with the passphrase
+	if [[ "$METHOD" == "pw" ]] || [[ "$METHOD" == "all" ]] ; then
+		if [[ "$PW_GEN" == "true" ]] ; then
+			PW_STORE=$(/usr/bin/osascript 2>/dev/null << EOT
+tell application "System Events"
+	activate
+	set theLogoPath to ((path to library folder from user domain) as text) & "Caches:local.lcars.dimago:lcars.png"
+	set thePasswordStore to button returned of (display dialog "DiMaGo will now store the encryption information in your DiMaGo keychain. What do you want to do with your randomly generated passphrase?" ¬
+		buttons {"Copy to Clipboard", "Store in Keychain"} ¬
+		with title "DiMaGo" ¬
+		with icon file theLogoPath ¬
+		giving up after 180)
+end tell
+thePasswordStore
+EOT)
+		else
+			PW_STORE=$(/usr/bin/osascript 2>/dev/null << EOT
+tell application "System Events"
+	activate
+	set theLogoPath to ((path to library folder from user domain) as text) & "Caches:local.lcars.dimago:lcars.png"
+	set thePasswordStore to button returned of (display dialog "DiMaGo will now store the encryption information in your DiMaGo keychain. What do you want to do with your passphrase?" ¬
+		buttons {"Nothing", "Copy to Clipboard", "Store in Keychain"} ¬
+		with title "DiMaGo" ¬
+		with icon file theLogoPath ¬
+		giving up after 180)
+end tell
+thePasswordStore
+EOT)
+		fi
+	fi
+
+	# add to DiMaGo keychain entry: UUID && password (optional) && public key(s) && SHA2 checksum (DMGs only)
 	if [[ "$METHOD" == "pw" ]] ; then
-		/usr/bin/security add-generic-password -U -D "disk image password" -l "$DMG_NAME" -s "$DMG_NAME" -a "$UUID" -j "$COMMENT" -T /System/Library/PrivateFrameworks/DiskImages.framework/Versions/A/Resources/diskimages-helper -T /usr/bin/security -w "$PASSPHRASE" DiMaGo.keychain
+		if [[ "$PW_STORE" == "Store in Keychain" ]] ; then
+			/usr/bin/security add-generic-password -U -D "disk image password" -l "$DMG_NAME" -s "$DMG_NAME" -a "$UUID" -j "$COMMENT" -T /System/Library/PrivateFrameworks/DiskImages.framework/Versions/A/Resources/diskimages-helper -w "$PASSPHRASE" DiMaGo.keychain
+		else
+			/usr/bin/security add-generic-password -U -D "disk image password" -l "$DMG_NAME" -s "$DMG_NAME" -a "$ACCOUNT" -j "$COMMENT" DiMaGo.keychain
+		fi
+		if [[ "$PW_STORE" != "Nothing" ]] ; then
+			echo "$PASSPHRASE" | /usr/bin/pbcopy
+		fi
 	elif [[ "$METHOD" == "all" ]] ; then
-		/usr/bin/security add-generic-password -U -D "disk image password" -l "$DMG_NAME" -s "$DMG_NAME" -a "$UUID" -j "$COMMENT" -T /System/Library/PrivateFrameworks/DiskImages.framework/Versions/A/Resources/diskimages-helper -T /usr/bin/security -w "$PASSPHRASE" DiMaGo.keychain
+		if [[ "$PW_STORE" == "Store in Keychain" ]] ; then
+			/usr/bin/security add-generic-password -U -D "disk image password" -l "$DMG_NAME" -s "$DMG_NAME" -a "$UUID" -j "$COMMENT" -T /System/Library/PrivateFrameworks/DiskImages.framework/Versions/A/Resources/diskimages-helper -w "$PASSPHRASE" DiMaGo.keychain
+		else
+			/usr/bin/security add-generic-password -U -D "disk image password" -l "$DMG_NAME" -s "$DMG_NAME" -a "$ACCOUNT" -j "$COMMENT" DiMaGo.keychain
+		fi
+		if [[ "$PW_STORE" != "Nothing" ]] ; then
+			echo "$PASSPHRASE" | /usr/bin/pbcopy
+		fi
 	elif [[ "$METHOD" == "key" ]] ; then
-		/usr/bin/security add-generic-password -U -D "disk image password" -l "$DMG_NAME" -s "$DMG_NAME" -a "$UUID" -j "$COMMENT" -T /System/Library/PrivateFrameworks/DiskImages.framework/Versions/A/Resources/diskimages-helper -T /usr/bin/security DiMaGo.keychain
+		/usr/bin/security add-generic-password -U -D "disk image password" -l "$DMG_NAME" -s "$DMG_NAME" -a "$ACCOUNT" -j "$COMMENT" DiMaGo.keychain
 	fi
 
 	# ask user to codesign DMG (only if the keychain contains CSCs)
