@@ -84,5 +84,11 @@ Only necessary if for some reason you want to run this from the shell or another
 * **DiMaGo** only uses native macOS command line programs; further options are available with `gsplit` (segment large DMGs) and `terminal-notifier` (extended notifications).
 * Cross-platform compatibility has only been tested on Windows. **7-zip** can only open unencrypted DMGs. **HFSExplorer** can open encrypted DMGs and sparsebundles, but is currently not compatible with S/MIME-encrypted disk images. Mounting including write access for sparsebundles is not possible. Linux and BSD compatibility has not been tested.
 
+## Bugs
+* When using more than 1 (one) public S/MIME key (SKID), `hdiutil` produces an error message: `__NSArrayM object 0x############# overreleased while already deallocating; break on objc_overrelease_during_dealloc_error to debug`; however, the disk image is still created
+* When using more than 9 (nine) SKIDs to encrypt a disk image (password or no password), `hdiutil` crashes with multiple instances of the above stderr; then the disk image is *not* created
+
+This is sadly *not* a **DiMaGo** bug, which I would be able to fix, but apparently due to bad Objective-C coding on **Apple**'s part.
+
 ## Acknowledgments
 The idea for this worklflow/script came from reading [**Erik Antonsson**'s Caltech article](http://design.caltech.edu/erik/Misc/encrypted_virtual_disk.html) on public key encryption of sparseimages
