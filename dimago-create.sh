@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# DiMaGo v1.3.0 (beta)
+# DiMaGo v1.3.1 (beta)
 # DiMaGo ➤ Create (shell script version)
 #
 # Note: DiMaGo will remain in beta status until DiMaGo ➤ Verify has been scripted
@@ -8,7 +8,7 @@
 LANG=en_US.UTF-8
 export PATH=/usr/local/bin:$PATH
 ACCOUNT=$(/usr/bin/id -un)
-CURRENT_VERSION="1.30"
+CURRENT_VERSION="1.31"
 
 # check compatibility
 MACOS2NO=$(/usr/bin/sw_vers -productVersion | /usr/bin/awk -F. '{print $2}')
@@ -475,15 +475,12 @@ if [[ "$LOCAL_ID" != "1" ]] ; then
 	fi
 	touch "$NK_TEMP/dimago.cnf"
 	echo -n "" > "$NK_TEMP/dimago.cnf"
-	HOST_NAME=$(/bin/hostname)
-	if [[ "$HOST_NAME" != *".local" ]] ; then
-		HOST_NAME="$HOST_NAME.local"
-	fi
 	LK_PW=$(/usr/bin/openssl rand -base64 47 | /usr/bin/tr -d /=+ | /usr/bin/cut -c -32)
-	/usr/bin/security add-generic-password -U -D "application password" -l "DiMaGo private key pw" -s "DiMaGo private key pw" -a "$ACCOUNT" -w "$LK_PW" login.keychain
+	/usr/bin/security add-generic-password -U -D "application password" -l "DiMaGo Base Identity pkpw" -s "DiMaGo Base Identity pkpw" -a "$ACCOUNT" -w "$LK_PW" login.keychain
 	/usr/bin/openssl genrsa -des3 -passout pass:$LK_PW -out "$NK_TEMP/dimago.key" 4096
-	NC_COMMON="DiMaGo $ACCOUNT"
-	NC_ADDR="$ACCOUNT.DiMaGo@$HOST_NAME"
+	NC_COMMON="DiMaGo Base Identity"
+	RANDSTR=$(/bin/date +%s | /usr/bin/shasum -a 256 | /usr/bin/base64 | /usr/bin/head -c 16 | /usr/bin/tr '[:upper:]' '[:lower:]' | xargs)
+	NC_ADDR="$RANDSTR@dimago.local"
 
 	LEAF_CONF="[req]
 prompt=no
@@ -504,7 +501,7 @@ extendedKeyUsage=emailProtection"
 	echo "$LEAF_CONF" >> "$NK_TEMP/dimago.cnf"
 	/usr/bin/openssl req -x509 -days 7300 -config "$NK_TEMP/dimago.cnf" -new -key "$NK_TEMP/dimago.key" -passin pass:$LK_PW -sha512 -set_serial 47 -out "$NK_TEMP/dimago.pem" -outform PEM
 	EXPORT_PW=$(/usr/bin/openssl rand -base64 47 | /usr/bin/tr -d /=+ | /usr/bin/cut -c -32)
-	/usr/bin/security add-generic-password -U -D "application password" -l "DiMaGo cert export pw" -s "DiMaGo cert export pw" -a "$ACCOUNT" -w "$EXPORT_PW" login.keychain
+	/usr/bin/security add-generic-password -U -D "application password" -l "DiMaGo Base Identity expw" -s "DiMaGo Base Identity expw" -a "$ACCOUNT" -w "$EXPORT_PW" login.keychain
 	/usr/bin/openssl pkcs12 -export -passout pass:$EXPORT_PW -out "$NK_TEMP/dimago.p12" -inkey "$NK_TEMP/dimago.key" -passin pass:$LK_PW -in "$NK_TEMP/dimago.pem"
 	/usr/bin/security import "$NK_TEMP/dimago.p12" -f pkcs12 -P "$EXPORT_PW" -k login.keychain
 	/usr/bin/security add-trusted-cert -r trustRoot -k login.keychain "$NK_TEMP/dimago.pem"
@@ -514,6 +511,7 @@ extendedKeyUsage=emailProtection"
 	rm -rf "$NK_TEMP"
 
 	/usr/bin/defaults write "$PREFS" localIDCreate -bool YES
+	/usr/bin/defaults write "$PREFS" localID "$NC_ADDR"
 fi
 
 # check for update
