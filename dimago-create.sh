@@ -1245,7 +1245,7 @@ EOT)
 
 		# read DiMaGo base identity SKID from preferences
 		DIMAGO_LSKID=$(/usr/bin/defaults read "$PREFS" localSKID 2>/dev/null)
-		if [[ "$DIMAGO_SKID" == "" ]] ; then
+		if [[ "$DIMAGO_LSKID" == "" ]] ; then
 			DIMAGO_LADDR=$(/usr/bin/defaults read "$PREFS" localID 2>/dev/null)
 			if [[ "$DIMAGO_LADDR" == "" ]] ; then
 				exit # ALT: continue
