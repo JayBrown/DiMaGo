@@ -9,7 +9,7 @@
 
 In essence, **DiMaGo** facilitates the rebirth of the [**PGPdisk** of olde](https://en.wikipedia.org/wiki/PGPDisk) for macOS, only with S/MIME instead of PGP/GPG encryption.
 
-If you encrypt a DMG or sparsebundle with a public S/MIME key, only a user in possession of the corresponding private key will be able to access the disk image contents. In most cases this is a better solution than password-based encryption, which is prone to dictionary attacks (**Spartan** et al.). It's also great for hiding content, e.g. in the cloud without the use of specialized tools like **Boxcryptor** or **Cryptomator**; and if hackers get a hold of your cloud password, at least your data will still be safe. You can also use multiple S/MIME keys, if more than one person needs to have access to the disk image contents—perfect for team work.
+If you encrypt a DMG or sparsebundle with a public S/MIME key, only a user in possession of the corresponding private key will be able to access the disk image contents. In most cases this is a better solution than password-based encryption, which is prone to dictionary attacks (**Spartan** et al.). It's also great for hiding content e.g. in the cloud, without the need for specialized cloud encryption tools like [**Cryptomator**](https://github.com/cryptomator/cryptomator), which is client-side and password-encrypted only, or [**Boxcryptor**](https://www.boxcryptor.com), which is not free for group access to encrypted content. With DiMaGo you can also use multiple S/MIME keys, if more than one person needs to have access to the disk image contents—perfect for team work. And if (nation state) hackers get a hold of your cloud password, at least your data will still be safe.
 
 As with S/MIME-encrypted email messages, after an S/MIME certificate used to encrypt a disk image has expired, you will still be able to mount the encrypted volume, as long as you do not delete the expired certificate from your keychain.
 
@@ -91,4 +91,5 @@ Only necessary if for some reason you want to run this from the shell or another
 This is sadly *not* a **DiMaGo** bug, which I would be able to fix, but apparently due to bad Objective-C coding on **Apple**'s part.
 
 ## Acknowledgments
-The idea for this worklflow/script came from reading [**Erik Antonsson**'s Caltech article](http://design.caltech.edu/erik/Misc/encrypted_virtual_disk.html) on public key encryption of sparseimages
+* The idea for this worklflow/script came from reading [**Erik Antonsson**'s Caltech article](http://design.caltech.edu/erik/Misc/encrypted_virtual_disk.html) on public key encryption of sparseimages
+* Thank you to the hackers who brought us the [Dropbox mega-breach](http://thehackernews.com/2016/08/dropbox-data-breach.html) which started me thinking in the first place
