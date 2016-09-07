@@ -1,6 +1,5 @@
 ![DiMaGo-platform-macos](https://img.shields.io/badge/platform-macOS-lightgrey.svg)
 ![DiMaGo-code-shell](https://img.shields.io/badge/code-shell-yellow.svg)
-[![DiMaGo-depend-coreutils](https://img.shields.io/badge/dependency-coreutils%208.25-green.svg)](https://www.gnu.org/software/coreutils)
 [![DiMaGo-depend-tnote](https://img.shields.io/badge/dependency-terminal--notifier%201.6.3-green.svg)](https://github.com/alloy/terminal-notifier)
 [![DiMaGo-license](http://img.shields.io/badge/license-MIT+-blue.svg)](https://github.com/JayBrown/DiMaGo/blob/master/license.md)
 
@@ -21,10 +20,9 @@ Such a master–slave setup is also great for corporate settings, e.g. if a syst
 Beta: it works (apparently), but it will remain in beta status until the DiMaGo verification script/workflow has been created
 
 ## Prerequisites for full functionality [optional]
-Install using [Homebrew](http://brew.sh) with `brew install <software-name>` (or with a similar manager)
+* [terminal-notifier](https://github.com/alloy/terminal-notifier)
 
-* [coreutils](https://www.gnu.org/software/coreutils) [Note: DiMaGo uses **GNU split** to segment DMGs]
-* [terminal-notifier](https://github.com/alloy/terminal-notifier) [optional]
+Install using [Homebrew](http://brew.sh) with `brew install terminal-notifier` (or with a similar manager)
 
 You need to have Spotlight enabled for `mdfind` to locate the terminal-notifier.app on your volume; if you don't install terminal-notifier, or if you have deactivated Spotlight, the DiMaGo scripts will call notifications via AppleScript instead
 
@@ -57,14 +55,18 @@ Only necessary if for some reason you want to run this from the shell or another
 * encrypts using multiple public S/MIME keys, e.g. for collaboration scenarios (team sparsebundles in the cloud etc.)
 * ignores expired S/MIME certificates
 * ignores S/MIME-compatible CA certificates (end entities only)
-* creates 4096-bit self-signed root S/MIME identity using `openssl` on first run (virtual email address)
+* creates 4096-bit self-signed root S/MIME identity (**DiMaGo Base Identity**) on first run using a random virtual email address
 * generates strong random passphrases in addition to manual passphrase (dual) input
 * asks whether the user also wants to store the encryption passphrase in the disk image's keychain entry
 * codesigns the disk images after creation, including sparsebundles (CSC required)
 * codesigns existing unsigned disk images (CSC required)
 * re-codesigns existing codesigned disk images (CSC required)
 * generates a SHA-2 256-bit checksum (DMGs only)
-* automatically splits DMGs larger than 200 MB while retaining the original disk image file (`gsplit` required)
+* writes DMG checksum to a CMS file which is signed with the local DiMaGo Base Identity
+* creates a shell command file to auto-verify a DMG's checksum using the information stored in the CMS file
+* automatically splits DMGs larger than 200 MB while retaining the original disk image file (CSCs are removed when using the `split` command)
+* writes checksums of all DMG segments to a CMS file which is signed with the local DiMaGo Base Identity
+* creates a shell command file to automatically (a) verify the segment checksums using the information stored in the CMS file, and (b) concat the segments
 * creates its own DiMaGo keychain in the userspace, accessible via macOS **Keychain Access**
 * stores UUIDs, SHA-256 checksums, S/MIME information (email addresses & SKIDs), and (optionally) passwords in discrete DiMaGo keychain entries
 
@@ -81,7 +83,7 @@ Only necessary if for some reason you want to run this from the shell or another
 * Self-signed or self-issued certificates will not be deemed "trusted" by the powers that be (incl. macOS), but the major advantage is that (as with PGP/GPG) you can simply ignore the powers that be. There is no third party involved: only the sender and the recipient(s) need to trust each other, and trust each other's certificates, and they only need to do it once. So self-signed certificates are (like PGP/GPG) *always* the better option. (They don't even need to include a valid email address, unless you actually want to use them for email message signing and protection as well.)
 * If you have received an email signed with a public S/MIME key, it is stored as valid in your keychain automatically (trusted certificates) or after you manually set the trust in your Mail client (self-issued/signed certificates), and then you can encrypt a disk image using that public key.
 * To codesign a DMG or sparsebundle, you need a Code Signing Certificate (CSC), which you can get as an Apple Developer or issue yourself using **Keychain Access** or third-party CAs like the above-mentioned **xca**.
-* **DiMaGo** only uses native macOS command line programs; further options are available with `gsplit` (segment large DMGs) and `terminal-notifier` (extended notifications).
+* **DiMaGo** only uses native macOS command line programs; a further option is available with `terminal-notifier` (extended notifications).
 * Cross-platform compatibility has only been tested on Windows. **7-zip** can only open unencrypted DMGs. **HFSExplorer** can open encrypted DMGs and sparsebundles, but is currently not compatible with S/MIME-encrypted disk images. Mounting including write access for sparsebundles is not possible. Linux and BSD compatibility has not been tested.
 
 ## Bugs

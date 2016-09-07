@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# DiMaGo v1.3.1 (beta)
+# DiMaGo v1.4.0 (beta)
 # DiMaGo ➤ Create (shell script version)
 #
 # Note: DiMaGo will remain in beta status until DiMaGo ➤ Verify has been scripted
@@ -8,7 +8,7 @@
 LANG=en_US.UTF-8
 export PATH=/usr/local/bin:$PATH
 ACCOUNT=$(/usr/bin/id -un)
-CURRENT_VERSION="1.31"
+CURRENT_VERSION="1.40"
 
 # check compatibility
 MACOS2NO=$(/usr/bin/sw_vers -productVersion | /usr/bin/awk -F. '{print $2}')
@@ -54,7 +54,7 @@ fi
 
 # detect/create temp file for storing mail addresses & SKIDs of extant S/MIME public keys
 CERTS_TEMP="$CACHE_DIR/certs~temp.txt"
-if [[ ! -e "$CERTS_TEMP" ]] ; then
+if [[ ! -f "$CERTS_TEMP" ]] ; then
 	touch "$CERTS_TEMP"
 fi
 
@@ -62,14 +62,14 @@ fi
 PREFS_DIR="${HOME}/Library/Preferences/"
 PREFS="local.lcars.dimago"
 PREFS_FILE="$PREFS_DIR/$PREFS.plist"
-if [[ ! -e "$PREFS_FILE" ]] ; then
+if [[ ! -f "$PREFS_FILE" ]] ; then
 	touch "$PREFS_FILE"
 	/usr/bin/defaults write "$PREFS" localIDCreate -bool NO
 fi
 
 # detect/create icon for terminal-notifier and osascript windows
 ICON_LOC="$CACHE_DIR/lcars.png"
-if [[ ! -e "$ICON_LOC" ]] ; then
+if [[ ! -f "$ICON_LOC" ]] ; then
 	ICON64="iVBORw0KGgoAAAANSUhEUgAAAIwAAACMEAYAAAD+UJ19AAACYElEQVR4nOzUsW1T
 URxH4fcQSyBGSPWQrDRZIGUq2IAmJWyRMgWRWCCuDAWrGDwAkjsk3F/MBm6OYlnf
 19zqSj/9i/N6jKenaRpjunhXV/f30zTPNzePj/N86q9fHx4evi9j/P202/3+WO47
@@ -87,13 +87,13 @@ GCAjMEBGYICMwAAZgQEy/wIAAP//nmUueblZmDIAAAAASUVORK5CYII="
 	echo "$ICON64" > "$CACHE_DIR/lcars.base64"
 	/usr/bin/base64 -D -i "$CACHE_DIR/lcars.base64" -o "$ICON_LOC" && rm -rf "$CACHE_DIR/lcars.base64"
 fi
-if [[ -e "$CACHE_DIR/lcars.base64" ]] ; then
+if [[ -f "$CACHE_DIR/lcars.base64" ]] ; then
 	rm -rf "$CACHE_DIR/lcars.base64"
 fi
 
 # detect/create big logo (curently unused)
 ICON1024="$CACHE_DIR/lcars1024.png"
-if [[ ! -e "$ICON1024" ]] ; then
+if [[ ! -f "$ICON1024" ]] ; then
 	ICON64_BIG="iVBORw0KGgoAAAANSUhEUgAABAAAAAQACAYAAAB/HSuDAAA9WUlEQVR4nOzYMUpD
 YRCF0ddHfK1g5G1AUtjZ5C5GsLJJZZltGLdk9vRM+1cyhY7iuXC2MDDftJ6mFfhZ
 x9eX43J3u0y/fNebq/nx/iHn57cV6JX9PvNl3Xfhq20287zbJe+ndQV65bK/cDe2
@@ -429,7 +429,7 @@ fi
 
 # create ICNS file for volume icon (currently unused)
 ICNS_LOC="$CACHE_DIR/lcars.icns"
-if [[ ! -e "$ICNS_LOC" ]] ; then
+if [[ ! -f "$ICNS_LOC" ]] ; then
 	ICONSET_DIR="$CACHE_DIR/lcars.iconset"
 	mkdir -p "$ICONSET_DIR"
 	/usr/bin/sips -z 16 16     "$ICON1024" --out "$ICONSET_DIR/icon_16x16.png" &>/dev/null
@@ -968,7 +968,7 @@ EOT)
 		if [[ "$DMG_NAME" != *".$TYPE" ]] ; then
 			DMG_NAME="$DMG_NAME.$TYPE"
 		fi
-		if [[ -e "$TARGET_PARENT/$DMG_NAME" ]] ; then
+		if [[ -f "$TARGET_PARENT/$DMG_NAME" ]] ; then
 			OV_CHOICE=$(/usr/bin/osascript 2>/dev/null << EOT
 tell application "System Events"
 	activate
@@ -1129,6 +1129,7 @@ EOT)
 	fi
 
 	# ask user to codesign DMG (only if the keychain contains CSCs)
+	# NOTE: when using split to segment DMGs, the code signing signature is lost
 	if [[ "$CS_ABLE" == "true" ]] ; then
 		if [[ "$CS_MULTI" == "false" ]] ; then
 			CERT_TEXT="use your identity $CERTS"
@@ -1191,43 +1192,231 @@ EOT)
 	fi
 
 	if [[ "$TYPE" == "dmg" ]] ; then # sparsebundles can't be segmented; they need to archived first
-		# check for GNU split (because the macOS BSD version sucks balls, and because hdiutil's segment option doesn't really help here; see below)
-		GSPLIT=$(which gsplit 2>&1)
-		if [[ "$GSPLIT" != "/"*"/gsplit" ]] ; then # gsplit not there; your loss
-			exit # ALT: continue
-		fi
 
 		# calculate DMG's file size
 		BYTES=$(/usr/bin/stat -f%z "$TARGET_PARENT/$DMG_NAME")
 		MEGABYTES=$(/usr/bin/bc -l <<< "scale=6; $BYTES/1000000")
-		if [[ ($MEGABYTES<1) ]] ; then
+		if (( $(echo "$MEGABYTES < 1" | /usr/bin/bc -l) )) ; then
 			DMG_SIZE="0$MEGABYTES"
 		else
 			DMG_SIZE="$MEGABYTES"
 		fi
 
-		# segment DMG with GNU split, if larger than 200 MB
-		if [[ ($DMG_SIZE>200) ]] ; then
+		# segment DMG with native split command, if larger than 200 MB
+		if (( $(echo "$DMG_SIZE > 200" | /usr/bin/bc -l) )) ; then
 			SEG_DIR_NAME="${DMG_NAME//.dmg}"
 			SEG_DIR="$TARGET_PARENT/$SEG_DIR_NAME~segments"
 			mkdir -p "$SEG_DIR"
 			notify "Segmenting DMG" "Size is greater than 200 MB"
-			SEGMENTING=$("$GSPLIT" -a 3 -d -b 200M "$TARGET_PARENT/$DMG_NAME" "$SEG_DIR/$DMG_NAME".)
+			SEGMENTING=$(/usr/bin/split -b 200m -a 3 "$TARGET_PARENT/$DMG_NAME" "$SEG_DIR/$DMG_NAME".)
 			echo "$SEGMENTING"
 			if [[ "$SEGMENTING" != "" ]] ; then
 				notify "DMG segmentation error" "$DMG_NAME"
+				echo "$SEGMENTING"
+				exit # ALT: continue
 			else
-				notify "DMG segmentation complete" "$DMG_NAME"
+				SEG="true"
 			fi
+			# change file suffixes
+			COUNT=0
+			cd "$SEG_DIR" && for SEGMENT in "$DMG_NAME".[a-z][a-z][a-z]
+			do
+				if [[ "$COUNT" == ? ]] ; then
+					SUFFIX="00$COUNT"
+				elif [[ "$COUNT" == ?? ]] ; then
+					SUFFIX="0$COUNT"
+				elif [[ "$COUNT" == ??? ]] ; then
+					SUFFIX="$COUNT"
+				fi
+				NEW_SEGMENT="$DMG_NAME.$SUFFIX"
+				mv "$SEGMENT" "$NEW_SEGMENT"
+				(( COUNT++ ))
+			done
+			cd /
 
 			# alternate hdiutil commands for splitting:
 			# only for "pw" method: (echo "$PASSPHRASE"; echo "$PASSPHRASE") | /usr/bin/hdiutil segment -o "$SEG_DIR/$DMG_NAME" -segmentSize 200M "$TARGET_PARENT/$DMG_NAME"
 			# only for non-encrypted dmg: /usr/bin/hdiutil segment -o "$SEG_DIR/$DMG_NAME" -segmentSize 200M "$TARGET_PARENT/$DMG_NAME"
 			# on DMGs encrypted with a public key ("key" & "all" method) hdiutil's segment option can only be used, if at least one of the public keys derives from a certificate with the private key in the user's keychain
 
+		else
+			SEG="false"
+		fi
+
+		# read DiMaGo base identity SKID from preferences
+		DIMAGO_LSKID=$(/usr/bin/defaults read "$PREFS" localSKID 2>/dev/null)
+		if [[ "$DIMAGO_SKID" == "" ]] ; then
+			DIMAGO_LADDR=$(/usr/bin/defaults read "$PREFS" localID 2>/dev/null)
+			if [[ "$DIMAGO_LADDR" == "" ]] ; then
+				exit # ALT: continue
+			fi
+			DIMAGO_LSKID=$(/usr/bin/security find-certificate -e "$DIMAGO_LADDR" | /usr/bin/grep "hpky" | /usr/bin/awk '{print $1;}' | /usr/bin/sed 's/^.*x//')
+			/usr/bin/defaults write "$PREFS" localSKID "$DIMAGO_LSKID"
+		fi
+
+		if [[ "$SEG" == "true" ]] ; then # generate checksums for segments, write to CMS and create verify & join command
+
+			HASH_INFO=""
+			cd "$SEG_DIR" && for SEGMENT in *
+			do
+				SEGSUM=$(/usr/bin/openssl dgst -sha256 "$SEGMENT")
+				HASH_INFO="$HASH_INFO
+$SEGSUM"
+			done
+			cd /
+			touch "$SEG_DIR/$SEG_DIR_NAME.sha256.txt"
+			HASH_INFO=$(echo "$HASH_INFO" | /usr/bin/tail -n +2)
+			echo "$HASH_INFO" > "$SEG_DIR/$SEG_DIR_NAME.sha256.txt"
+
+			/usr/bin/security cms -S -i "$SEG_DIR/$SEG_DIR_NAME.sha256.txt" -Z "$DIMAGO_LSKID" -G -H SHA256 -P -o "$SEG_DIR/$SEG_DIR_NAME~segments.sha256.cms"
+			rm -rf "$SEG_DIR/$SEG_DIR_NAME.sha256.txt"
+
+			CMD_LOC="$SEG_DIR/$DMG_NAME.join.command"
+			touch "$CMD_LOC"
+
+			VER_FUNC=$(/bin/cat << 'EOT'
+#!/bin/bash
+DIR="$( cd "$( /usr/bin/dirname "${BASH_SOURCE[0]}" )" && pwd )"
+echo "Accessing: $DIR"
+if [ ! -f "$DIR/"*"~segments.sha256.cms" ] ; then
+	echo "Error: CMS is missing!"
+	echo "Exiting..."
+else
+	echo "Found CMS file"
+	echo "Verifying with signature..."
+	DIGEST=$(/usr/bin/security cms -D -i "$DIR/"*"~segments.sha256.cms" 2>&1)
+	if [ "$(echo "$DIGEST" | /usr/bin/grep "security: ")" != "" ] ; then
+		VERIFY="false"
+		echo "$DIGEST"
+		echo "Result: CMS corrupted"
+	else
+		echo "Verification done. OK."
+		echo "Verifying checksums..."
+		VERIFY="true"
+		while IFS= read -r RECORD
+		do
+			echo ""
+			NAME=$(echo "$RECORD" | rev | /usr/bin/awk -F= '{print $2}' | rev | sed -n 's/.*(//;s/).*//p')
+			SEGNO=$(echo "$NAME" | rev | /usr/bin/awk -F. '{print $1}' | rev)
+			FULLPATH="$DIR/$NAME"
+			echo "*** SEGMENT $SEGNO ***"
+			if [ ! -f "$DIR/$NAME" ] ; then
+				VERIFY="false"
+				FULLPATH="n/a"
+				HASH1=$(echo "$RECORD" | rev | /usr/bin/awk -F= '{print $1}' | rev | xargs)
+				HASH2="checksum n/a"
+				RESULT="file missing"
+			else
+				HASH1=$(echo "$RECORD" | rev | /usr/bin/awk -F= '{print $1}' | rev | xargs)
+				HASH2=$(/usr/bin/shasum -a 256 "$DIR/$NAME" | /usr/bin/awk '{print $1}')
+				if [ "$HASH2" != "$HASH1" ] ; then
+					VERIFY="false"
+					RESULT="checksum mismatch"
+				else
+					RESULT="OK"
+				fi
+			fi
+			echo "Filename: $NAME"
+			echo "Path: $FULLPATH"
+			echo "Hash (CMS): $HASH1"
+			echo "Hash (cmd): $HASH2"
+			echo "Result: $RESULT"
+		done <<< "$(echo -e "$DIGEST")"
+	fi
+	echo ""
+	if [ "$VERIFY" == "false" ] ; then
+		echo "Verification done. There were errors!"
+		echo "Exiting..."
+	elif [ "$VERIFY" == "true" ] ; then
+		echo "Verification done. All OK."
+		echo "Joining segments with cat..."
+		echo ""
+		DEST_NAME=$(echo "$NAME" | rev | /usr/bin/awk -F. '{print substr($0, index($0,$2))}' | rev)
+		CONCAT=$(/bin/cat "$DIR/$DEST_NAME."??? > "$DIR/$DEST_NAME")
+		if [ "$CONCAT" != "" ] ; then
+			echo "$CONCAT"
+			echo "Possible error joining segments!"
+			echo "Exiting..."
+		else
+			echo "Finished joining segments: $DEST_NAME"
+			echo "Note: disk image code signing signatures are lost when using the split command."
 		fi
 	fi
+fi
+EOT)
+			echo "$VER_FUNC" > "$CMD_LOC"
+			/bin/chmod u+x "$CMD_LOC"
+			notify "DMG segmentation complete" "$DMG_NAME"
 
+		elif [[ "$SEG" == "false" ]] ; then # write checksum for DMG to CMS and create verify command
+
+			cd "$TARGET_PARENT"
+			HASH_INFO=$(/usr/bin/openssl dgst -sha256 "$DMG_NAME")
+			cd /
+			touch "$TARGET_PARENT/$DMG_NAME.sha256.txt"
+			echo "$HASH_INFO" > "$TARGET_PARENT/$DMG_NAME.sha256.txt"
+
+			/usr/bin/security cms -S -i "$TARGET_PARENT/$DMG_NAME.sha256.txt" -Z "$DIMAGO_LSKID" -G -H SHA256 -P -o "$TARGET_PARENT/$DMG_NAME.sha256.cms"
+			rm -rf "$TARGET_PARENT/$DMG_NAME.sha256.txt"
+
+			CMD_LOC="$TARGET_PARENT/$DMG_NAME.verify.command"
+			touch "$CMD_LOC"
+
+			VER_FUNC=$(/bin/cat << 'EOT'
+#!/bin/bash
+DIR="$( cd "$( /usr/bin/dirname "${BASH_SOURCE[0]}" )" && pwd )"
+echo "Accessing: $DIR"
+if [ ! -f "$DIR/"*".sha256.cms" ] ; then
+	echo "Error: CMS is missing!"
+	echo "Exiting..."
+else
+	echo "Found CMS file"
+	echo "Verifying with signature..."
+	DIGEST=$(/usr/bin/security cms -D -i "$DIR/"*".sha256.cms" 2>&1)
+	if [ "$(echo "$DIGEST" | /usr/bin/grep "security: ")" != "" ] ; then
+		VERIFY="false"
+		echo "$DIGEST"
+		echo "Result: CMS corrupted"
+	else
+		echo "Verification done. OK."
+		echo "Verifying checksum..."
+		NAME=$(echo "$DIGEST" | rev | /usr/bin/awk -F= '{print $2}' | rev | sed -n 's/.*(//;s/).*//p')
+		FULLPATH="$DIR/$NAME"
+		if [ ! -f "$DIR/$NAME" ] ; then
+			VERIFY="false"
+			FULLPATH="n/a"
+			HASH1=$(echo "$DIGEST" | rev | /usr/bin/awk -F= '{print $1}' | rev | xargs)
+			HASH2="checksum n/a"
+			RESULT="file missing"
+		else
+			HASH1=$(echo "$DIGEST" | rev | /usr/bin/awk -F= '{print $1}' | rev | xargs)
+			HASH2=$(/usr/bin/shasum -a 256 "$DIR/$NAME" | /usr/bin/awk '{print $1}')
+			if [ "$HASH2" != "$HASH1" ] ; then
+				VERIFY="false"
+				RESULT="checksum mismatch"
+			else
+				VERIFY="true"
+				RESULT="OK"
+			fi
+		fi
+		echo "Filename: $NAME"
+		echo "Path: $FULLPATH"
+		echo "Hash (CMS): $HASH1"
+		echo "Hash (cmd): $HASH2"
+		echo "Result: $RESULT"
+	fi
+	if [ "$VERIFY" == "false" ] ; then
+		echo "Error! Exiting..."
+	elif [ "$VERIFY" == "true" ] ; then
+		echo "Verifications done. All OK."
+	fi
+fi
+EOT)
+
+			echo "$VER_FUNC" > "$CMD_LOC"
+			/bin/chmod u+x "$CMD_LOC"
+		fi
+	fi
 fi
 
 done
