@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# DiMaGo v1.4.0 (beta)
+# DiMaGo v1.4.1 (beta)
 # DiMaGo ➤ Create (shell script version)
 #
 # Note: DiMaGo will remain in beta status until DiMaGo ➤ Verify has been scripted
@@ -8,7 +8,7 @@
 LANG=en_US.UTF-8
 export PATH=/usr/local/bin:$PATH
 ACCOUNT=$(/usr/bin/id -un)
-CURRENT_VERSION="1.40"
+CURRENT_VERSION="1.41"
 
 # check compatibility
 MACOS2NO=$(/usr/bin/sw_vers -productVersion | /usr/bin/awk -F. '{print $2}')
@@ -478,9 +478,9 @@ if [[ "$LOCAL_ID" != "1" ]] ; then
 	LK_PW=$(/usr/bin/openssl rand -base64 47 | /usr/bin/tr -d /=+ | /usr/bin/cut -c -32)
 	/usr/bin/security add-generic-password -U -D "application password" -l "DiMaGo Base Identity pkpw" -s "DiMaGo Base Identity pkpw" -a "$ACCOUNT" -w "$LK_PW" login.keychain
 	/usr/bin/openssl genrsa -des3 -passout pass:$LK_PW -out "$NK_TEMP/dimago.key" 4096
-	NC_COMMON="DiMaGo Base Identity"
 	RANDSTR=$(/bin/date +%s | /usr/bin/shasum -a 256 | /usr/bin/base64 | /usr/bin/head -c 16 | /usr/bin/tr '[:upper:]' '[:lower:]' | xargs)
 	NC_ADDR="$RANDSTR@dimago.local"
+	NC_COMMON="DiMaGo Base Identity [$RANDSTR]"
 
 	LEAF_CONF="[req]
 prompt=no
@@ -795,6 +795,7 @@ EOT)
 
 		# search for valid S/MIME keys
 		notify "Please wait! Searching…" "Valid public S/MIME keys"
+		DIMAGO_LADDR=$(/usr/bin/defaults read "$PREFS" localID)
 		ALL_CERTS=$(/usr/bin/security find-certificate -a -p 2>/dev/null)
 		RECORD=""
 		echo "$ALL_CERTS" | while IFS= read -r LINE
@@ -818,6 +819,11 @@ $LINE"
 				if [[ "$CERT_MAIL" == "" ]] ; then
 					RECORD=""
 					continue
+				elif [[ "$CERT_MAIL" == *"@dimago.local" ]] ; then
+					if [[ "$CERT_MAIL" != "$DIMAGO_LADDR" ]] ; then
+						RECORD=""
+						continue
+					fi
 				fi
 				EXPIRES=$(echo "$RECORD" | /usr/bin/openssl x509 -inform PEM -checkend 3600)
 				if [[ "$EXPIRES" == "Certificate will expire" ]] ; then
@@ -829,7 +835,15 @@ $LINE"
 					RECORD=""
 					continue
 				fi
-				echo "$CERT_MAIL:::$SKID" >> "$CERTS_TEMP"
+				if [[ "$CERT_MAIL" == "$DIMAGO_LADDR" ]] ; then
+					CERT_CN="$ACCOUNT"
+				else
+					CERT_CN=$(echo "$RECORD" | /usr/bin/openssl x509 -inform PEM -noout -subject | /usr/bin/sed -n '/^subject/s/^.*CN=//p' | /usr/bin/awk -F"/emailAddress=" '{print $1}')
+					if [[ "$CERT_CN" == "" ]] ; then
+						CERT_CN="n/a"
+					fi
+				fi
+				echo "$CERT_MAIL [$CERT_CN]:::$SKID" >> "$CERTS_TEMP"
 				RECORD=""
 			fi
 		done
@@ -859,10 +873,9 @@ EOT)
 				exit # ALT: continue
 			else
 				KEY_RETURN="true"
-				KEY_ROW=$(echo "$KEY_ADDR" | /usr/bin/awk '{gsub(", "," "); print}')
 				SKID_ROW=""
 				ENCRYPT_INFO=""
-				for ADDRESS in $KEY_ROW
+				for ADDRESS in $(echo "$KEY_ADDR" | /usr/bin/grep -Eo '[^ ]*@[^ ]*')
 				do
 					FINAL_SKID=$(echo "$CERT_DIGEST" | /usr/bin/grep "$ADDRESS" | /usr/bin/awk -F":::" '{print $2}')
 					SKID_ROW="$SKID_ROW$FINAL_SKID,"
@@ -871,6 +884,7 @@ $FINAL_SKID
 "
 				done
 				SKID_ROW=$(echo "$SKID_ROW" | /usr/bin/sed 's/,*$//g')
+				echo "$SKID_ROW"
 			fi
 		fi
 	fi
@@ -1170,12 +1184,14 @@ end tell
 theResult
 EOT)
 				if [[ "$CERT_CHOICE" != "" ]] && [[ "$CERT_CHOICE" != "false" ]] ; then
+					sleep 1 # sometimes hdiutil isn't fast enough, and codesign will not receive the disk image basename
 					CS_RESULT=$(/usr/bin/codesign -s "$CERT_CHOICE" -v "$TARGET_PARENT/$DMG_NAME" 2>&1)
 					CS_STATUS="true"
 				else
 					CS_STATUS="false"
 				fi
 			elif [[ "$CS_MULTI" == "false" ]] ; then # use only CSC in keychain
+				sleep 1 # sometimes hdiutil isn't fast enough, and codesign will not receive the disk image basename
 				CS_RESULT=$(/usr/bin/codesign -s "$CERTS" -v "$TARGET_PARENT/$DMG_NAME" 2>&1)
 				CS_STATUS="true"
 			fi
