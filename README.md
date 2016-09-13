@@ -31,13 +31,13 @@ Because DiMaGo uses the macOS Notification Center, the minimum Mac OS requiremen
 ## Installation & Usage
 * [Download the latest DMG](https://github.com/JayBrown/DiMaGo/releases) and open
 
-### Workflows
+### Workflow
 * Double-click on the workflow file to install
 * If you encounter problems, open it with Automator and save/install from there
 * Standard Finder integration in the Services menu
 
-## Launch Agent [optional, recommended]
-* Move the ***helper script*** `dimago-scan.sh` into `/usr/local/bin`
+### Launch Agent [optional, recommended]
+* Move the **helper script** `dimago-scan.sh` into `/usr/local/bin`
 * In your shell enter `chmod +x /usr/local/bin/dimago-scan.sh`
 * Move the **agent** `local.lcars.DiMaGoScanner.plist` into `$HOME/Library/LaunchAgents`
 * In your shell enter `launchctl load $HOME/Library/LaunchAgents/local.lcars.DiMaGoScanner.plist`
