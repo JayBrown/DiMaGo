@@ -10,16 +10,16 @@ In essence, **DiMaGo** facilitates the rebirth of the [**PGPdisk** of olde](http
 
 If you encrypt a DMG or sparsebundle with a public S/MIME key, only a user in possession of the corresponding private key will be able to access the disk image contents. In most cases this is a better solution than password-based encryption, which is prone to dictionary attacks (**Spartan** et al.). It's also great for hiding content e.g. in the cloud, without the need for specialized cloud encryption tools like [**Cryptomator**](https://github.com/cryptomator/cryptomator), which only works locally, or [**Boxcryptor**](https://www.boxcryptor.com), which is not free for group access to encrypted content. With DiMaGo you can also use multiple S/MIME keys, if more than one person needs to have access to the disk image contents—perfect for team work. And if (nation state) hackers get a hold of your cloud password, at least your data will still be safe.
 
-As with S/MIME-encrypted email messages, after an S/MIME certificate used to encrypt a disk image has expired, you will still be able to mount the encrypted volume, as long as you do not delete the expired certificate from your keychain.
+As with S/MIME-encrypted email messages, after an S/MIME certificate used to encrypt a disk image has expired, you will still be able to mount the encrypted volume in the Finder, as long as you do not delete the expired certificate from your keychain.
 
-S/MIME protection of disk images will not help you if you're compelled to reveal the contents of your computer. In these cases, once you've provided authorities with the macOS login password, your keychains are unlocked (at least with macOS default settings), and so are your encrypted volumes, once an agent clicks on them, either because the public S/MIME encryption key is still in your login keychain, or because you have chosen to store the disk image passphrase in your DiMaGo keychain. You can easily evade this problem if you create a disk image encrypted with both S/MIME and a password, but on a *different* Mac. On this master Macintosh you can store the S/MIME certificate chain and (optionally) the passphrase in your DiMaGo keychain. Then all you need to do is copy the disk image sans certificate to your main Mac (slave Macintosh), where you are only to use the passphrase to mount the encrypted volume. Just be sure that you do not store the disk image password in the keychain of your slave Macintosh, because that would defeat the purpose.
+S/MIME protection of disk images will not help you if you're compelled to reveal the contents of your computer. In these cases, once you've provided authorities with the macOS login password, your keychains are unlocked (at least with macOS default settings), and so are your encrypted volumes, once an agent clicks on them, either because the private S/MIME encryption key is still in your login keychain, or because you have chosen to store the disk image passphrase in your DiMaGo keychain. You can easily evade this problem if you create a disk image encrypted with both S/MIME and a password, but on a *different* Mac. On this master Macintosh you can store the S/MIME certificate chain and (optionally) the passphrase in your DiMaGo keychain. Then all you need to do is copy the disk image sans certificate to your main Mac (slave Macintosh), where you are only to use the passphrase to mount the encrypted volume. Just be sure that you do not store the disk image password in the keychain of your slave Macintosh, because that would defeat the purpose.
 
 Such a master–slave setup is also great for corporate settings, e.g. if a system administrator wants to provide employees with an encrypted read-write sparsebundle; in most cases the passphrase is only known to the employee, which he has to type in himself, but the admin will still have a recovery option using the admin S/MIME key on his own computer. In an alternate approach for a corporate setting the admin can also create an S/MIME certificate chain for the employee, and keep a copy for himself.
 
 ## Current status
 Beta: it works (apparently), but it will remain in beta status until the DiMaGo verification script/workflow has been created
 
-## Prerequisites for full functionality [optional]
+## Prerequisites for full functionality [optional, recommended]
 * [terminal-notifier](https://github.com/alloy/terminal-notifier)
 
 Install using [Homebrew](http://brew.sh) with `brew install terminal-notifier` (or with a similar manager)
@@ -36,12 +36,18 @@ Because DiMaGo uses the macOS Notification Center, the minimum Mac OS requiremen
 * If you encounter problems, open it with Automator and save/install from there
 * Standard Finder integration in the Services menu
 
-### Shell script [optional]
-* Move the script to `/usr/local/bin`
+## Launch Agent [optional, recommended]
+* Move the ***helper script*** `dimago-scan.sh` into `/usr/local/bin`
+* In your shell enter `chmod +x /usr/local/bin/dimago-scan.sh`
+* Move the **agent** `local.lcars.DiMaGoScanner.plist` into `$HOME/Library/LaunchAgents`
+* In your shell enter `launchctl load $HOME/Library/LaunchAgents/local.lcars.DiMaGoScanner.plist`
+
+### Main shell script [optional]
+* Move the script `dimago-create.sh` to `/usr/local/bin`
 * In your shell enter `chmod +x /usr/local/bin/dimago-create.sh`
 * Run the script with `dimago-create.sh /path/to/target`
 
-Only necessary if for some reason you want to run this from the shell or another shell script.
+Only necessary if for some reason you want to run this from the shell or another shell script. For normal use the workflow will be sufficient.
 
 ## Functionality
 * creates two types of disk images, read-only DMGs or read/write growable sparsebundles, from a source folder
@@ -60,20 +66,22 @@ Only necessary if for some reason you want to run this from the shell or another
 * asks whether the user also wants to store the encryption passphrase in the disk image's keychain entry
 * codesigns the disk images after creation, including sparsebundles (CSC required)
 * codesigns existing unsigned disk images (CSC required)
-* re-codesigns existing codesigned disk images (CSC required)
+* recodesigns existing codesigned disk images (CSC required)
 * generates a SHA-2 256-bit checksum (DMGs only)
-* writes DMG checksum to a CMS file which is signed with the local DiMaGo Base Identity
+* writes DMG checksum to a CMS file which is signed with an S/MIME identity of the user's choice
 * creates a shell command file to auto-verify a DMG's checksum using the information stored in the CMS file
-* automatically splits DMGs larger than 200 MB while retaining the original disk image file (CSCs are removed when using the `split` command)
-* writes checksums of all DMG segments to a CMS file which is signed with the local DiMaGo Base Identity
+* automatically splits DMGs larger than 200 MB while retaining the original disk image file (CSCs are lost when using the `split` command)
+* writes checksums of all DMG segments to a CMS file which is signed with an S/MIME identity of the user's choice
 * creates a shell command file to automatically (a) verify the segment checksums using the information stored in the CMS file, and (b) concat the segments
 * creates its own DiMaGo keychain in the userspace, accessible via macOS **Keychain Access**
 * stores UUIDs, SHA-256 checksums, S/MIME information (email addresses & SKIDs), and (optionally) passwords in discrete DiMaGo keychain entries
+* rescans in the background every 8 hours for new valid public S/MIME keys and new valid S/MIME identities (LaunchAgent installation required)
+* performs update check on every launch
 
 ## Planned Functionality (this might take a while)
-* write email addresses and SKIDs of existing valid public S/MIME keys to preferences, with option to rescan
+* **second workflow/script to verify and trust certificates used to codesign** a disk image
+* distribution as installer package (`.pkg`) including options for `terminal-notifier` and `dimago-create.sh`
 * preferences for disk image creation: volume icon, background image etc. (DMGs only)
-* **second workflow/script to verify and trust certificates used to codesign**
 * research `hdiutil` options `-cacert`, and `-certificate` plus `-recover`
 * **third workflow/script to convert existing disk images**
 
@@ -89,10 +97,33 @@ Only necessary if for some reason you want to run this from the shell or another
 
 ## Bugs
 * When using more than 1 (one) public S/MIME key (SKID), `hdiutil` produces an error message: `__NSArrayM object 0x############# overreleased while already deallocating; break on objc_overrelease_during_dealloc_error to debug`; however, the disk image is still created
-* When using more than 9 (nine) SKIDs to encrypt a disk image (password or no password), `hdiutil` crashes with multiple instances of the above stderr; then the disk image is *not* created
+* When using more than approx. 8 or 9 SKIDs to encrypt a disk image (password or no password), `hdiutil` crashes with multiple instances of the above stderr; then the disk image is *not* created
 
 This is sadly *not* a **DiMaGo** bug, which I would be able to fix, but apparently due to bad Objective-C coding on **Apple**'s part.
 
+## Uninstall
+Remove the following files or folders:
+
+```
+$HOME/Library/Caches/local.lcars.dimago
+$HOME/Library/LaunchAgents/local.lcars.DiMaGoScanner.plist
+$HOME/Library/Logs/DiMaGoScanner.log
+$HOME/Library/Preferences/local.lcars.dimago.plist
+$HOME/Library/Services/DiMaGo\ ➤\ Create.workflow
+/private/tmp/local.lcars.DiMaGoScanner.stderr
+/private/tmp/local.lcars.DiMaGoScanner.stdout
+/usr/local/bin/dimago-create.sh
+/usr/local/bin/dimago-scan.sh
+```
+
+Note: the two files in `/private/tmp` are temporary log files; macOS will remove them automatically at next reboot
+
 ## Acknowledgments
-* The idea for this worklflow/script came from reading [**Erik Antonsson**'s Caltech article](http://design.caltech.edu/erik/Misc/encrypted_virtual_disk.html) on public key encryption of sparseimages
+* The idea for this worklflow/script came from reading [**Erik Antonsson**'s Caltech article](http://design.caltech.edu/erik/Misc/encrypted_virtual_disk.html) on public key encryption of the legacy sparseimage format
 * Thank you to the hackers who brought us the [Dropbox mega breach](http://thehackernews.com/2016/08/dropbox-data-breach.html) which started me thinking in the first place
+
+## What I want (eventually)
+* is for someone to "steal" this idea and give us a great GUI-based software; **DropDMG** is great, but it lacks a lot of the necessary features
+* is a cross-platform (macOS/Win/Linux/BSD) solution for mountable read-only and read/write disk images, including cross-platform sparsebundles, formattable in whatever file system the user selects, securely encrypted with (multiple) S/MIME, i.e. a user-friendly modern alternative to the old PGPdisk, and on steroids of course 💪
+
+So yeah, we can encrypt email messages with S/MIME, but let's take it to the next level. We should. If my wishes above don't come true, you are welcome to improve the DiMaGo script, which would benefit at least macOS users; I'm not a great programmer, I just manage to make things work somehow, but information security is important to me, *very important*, but it's only relevant, if we can make it accessible and keep it easy for the average user

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>local.lcars.DiMaGoScanner</string>
+	<key>LowPriorityBackgroundIO</key>
+	<true/>
+	<key>LowPriorityIO</key>
+	<true/>
+	<key>Nice</key>
+	<integer>20</integer>
+	<key>Program</key>
+	<string>/usr/local/bin/dimago-scan.sh</string>
+	<key>StandardErrorPath</key>
+	<string>/tmp/local.lcars.DiMaGoScanner.stderr</string>
+	<key>StandardOutPath</key>
+	<string>/tmp/local.lcars.DiMaGoScanner.stdout</string>
+	<key>StartInterval</key>
+	<integer>28800</integer>
+</dict>
+</plist>

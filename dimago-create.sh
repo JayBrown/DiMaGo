@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# DiMaGo v1.4.1 (beta)
+# DiMaGo v1.5.0 (beta)
 # DiMaGo ➤ Create (shell script version)
 #
 # Note: DiMaGo will remain in beta status until DiMaGo ➤ Verify has been scripted
@@ -8,7 +8,7 @@
 LANG=en_US.UTF-8
 export PATH=/usr/local/bin:$PATH
 ACCOUNT=$(/usr/bin/id -un)
-CURRENT_VERSION="1.41"
+CURRENT_VERSION="1.50"
 
 # check compatibility
 MACOS2NO=$(/usr/bin/sw_vers -productVersion | /usr/bin/awk -F. '{print $2}')
@@ -26,6 +26,37 @@ tell application "System Events"
 end tell
 EOT)
 	exit
+fi
+
+# cache directory
+CACHE_DIR="${HOME}/Library/Caches/local.lcars.dimago"
+if [[ ! -e "$CACHE_DIR" ]] ; then
+	mkdir -p "$CACHE_DIR"
+fi
+
+# preferences
+PREFS_DIR="${HOME}/Library/Preferences/"
+PREFS="local.lcars.dimago"
+PREFS_FILE="$PREFS_DIR/$PREFS.plist"
+if [[ ! -f "$PREFS_FILE" ]] ; then
+	touch "$PREFS_FILE"
+	/usr/bin/defaults write "$PREFS" localIDCreate -bool NO
+fi
+
+# database
+DB_LOC="$CACHE_DIR/DiMaGo.db"
+if [[ ! -f "$DB_LOC" ]] ; then
+	/usr/bin/sqlite3 "$DB_LOC" "create table PublicKeys(address TEXT, name TEXT, skid TEXT, expires TEXT, misc1 TEXT, misc2 TEXT, misc3 TEXT);"
+	/usr/bin/sqlite3 "$DB_LOC" "create table Identities(address TEXT, name TEXT, skid TEXT, expires TEXT, misc1 TEXT, misc2 TEXT, misc3 TEXT);"
+else
+	PK_TABLE=$(/usr/bin/sqlite3 "$DB_LOC" "select name from sqlite_master where type='table' and name='PublicKeys';")
+	if [[ "$PK_TABLE" == "" ]] ; then
+		/usr/bin/sqlite3 "$DB_LOC" "create table PublicKeys(address TEXT, name TEXT, skid TEXT, expires TEXT, misc1 TEXT, misc2 TEXT, misc3 TEXT);"
+	fi
+	ID_TABLE=$(/usr/bin/sqlite3 "$DB_LOC" "select name from sqlite_master where type='table' and name='Identities';")
+	if [[ "$ID_TABLE" == "" ]] ; then
+		/usr/bin/sqlite3 "$DB_LOC" "create table Identities(address TEXT, name TEXT, skid TEXT, expires TEXT, misc1 TEXT, misc2 TEXT, misc3 TEXT);"
+	fi
 fi
 
 # notification function
@@ -46,26 +77,180 @@ EOT
 	fi
 }
 
-# detect/create directories
-CACHE_DIR="${HOME}/Library/Caches/local.lcars.dimago"
-if [[ ! -e "$CACHE_DIR" ]] ; then
-	mkdir -p "$CACHE_DIR"
-fi
+# public S/MIME key scan function
+pk-scan () {
+	if [[ "$1" == "rescan" ]] ; then
+		notify "Please wait! Rescanning…" "Valid public S/MIME keys"
+	else
+		notify "Please wait! Scanning…" "Valid public S/MIME keys"
+	fi
+	POSIX_DATE=$(/bin/date +%s)
+	CURRENT_YEAR=$(/bin/date +%Y)
+	/usr/bin/defaults write "$PREFS" pkScan "$POSIX_DATE"
+	/usr/bin/sqlite3 "$DB_LOC" "DELETE FROM PublicKeys WHERE ROWID > -1;"
+	DIMAGO_LADDR=$(/usr/bin/defaults read local.lcars.dimago localID)
+	ALL_CERTS=$(/usr/bin/security find-certificate -a -p 2>/dev/null)
+	RECORD=""
+	echo "$ALL_CERTS" | while IFS= read -r LINE
+	do
+		RECORD="$RECORD
+$LINE"
+		if [[ $(echo "$RECORD" | /usr/bin/grep "END CERTIFICATE") != "" ]] ; then
+			RECORD=$(echo "$RECORD" | /usr/bin/sed '1d')
+			PURPOSE_ALL=$(echo "$RECORD" | /usr/bin/openssl x509 -inform PEM -noout -purpose 2>/dev/null)
+			PURPOSE_CA=$(echo "$PURPOSE_ALL" | /usr/bin/grep "S/MIME encryption CA" | /usr/bin/awk -F: '{print $2}' | xargs)
+			if [[ "$PURPOSE_CA" == "Yes" ]] ; then
+				RECORD=""
+				continue
+			fi
+			PURPOSE=$(echo "$PURPOSE_ALL" | /usr/bin/grep "S/MIME encryption" | /usr/bin/awk -F: '{print $2}' | xargs)
+			if [[ "$PURPOSE" == "No" ]] ; then
+				RECORD=""
+				continue
+			fi
+			CERT_MAIL=$(echo "$RECORD" | /usr/bin/openssl x509 -inform PEM -noout -email 2>/dev/null)
+			if [[ "$CERT_MAIL" == "" ]] ; then
+				RECORD=""
+				continue
+			elif [[ "$CERT_MAIL" != *"@"*"."* ]] ; then
+				RECORD=""
+				continue
+			elif [[ "$CERT_MAIL" == *"@dimago.local" ]] ; then
+				if [[ "$CERT_MAIL" != "$DIMAGO_LADDR" ]] ; then
+					RECORD=""
+					continue
+				fi
+			fi
+			EXPIRES=$(echo "$RECORD" | /usr/bin/openssl x509 -inform PEM -checkend 3600)
+			if [[ "$EXPIRES" == "Certificate will expire" ]] ; then
+				RECORD=""
+				continue
+			else
+				UNTIL=$(echo "$RECORD" | /usr/bin/openssl x509 -inform PEM -noout -enddate 2>/dev/null | /usr/bin/awk -F"=" '{print $2}')
+				if [[ "$UNTIL" == "" ]] ; then
+					EXP_DATE=""
+				else
+					YEAR=$(echo "$UNTIL" | /usr/bin/awk '{print $4}' | xargs)
+					if [[ "$YEAR" == "$CURRENT_YEAR" ]] ; then
+						MONTH=$(echo "$UNTIL" | /usr/bin/awk '{print $1}' | xargs)
+						DAY=$(echo "$UNTIL" | /usr/bin/awk '{print $2}' | xargs)
+						EXP_DATE="$DAY $MONTH $YEAR"
+					else
+						EXP_DATE=""
+					fi
+				fi
+			fi
+			SKID=$(echo "$RECORD" | /usr/bin/openssl x509 -inform PEM -noout -text | /usr/bin/grep -A1 "Subject Key Identifier" | /usr/bin/tail -1 | xargs | /usr/bin/sed s/://g)
+			if [[ "$SKID" == "" ]] ; then
+				RECORD=""
+				continue
+			fi
+			if [[ "$CERT_MAIL" == "$DIMAGO_LADDR" ]] ; then
+				CERT_CN="$ACCOUNT"
+			else
+				CERT_CN=$(echo "$RECORD" | /usr/bin/openssl x509 -inform PEM -noout -subject | /usr/bin/sed -n '/^subject/s/^.*CN=//p' | /usr/bin/awk -F"/emailAddress=" '{print $1}')
+				if [[ "$CERT_CN" == "" ]] ; then
+					CERT_CN="n/a"
+				fi
+			fi
+			/usr/bin/sqlite3 "$DB_LOC" "insert into PublicKeys (address,name,skid,expires) values (\"$CERT_MAIL\",\"$CERT_CN\",\"$SKID\",\"$EXP_DATE\");"
+			RECORD=""
+		fi
+	done
+}
 
-# detect/create temp file for storing mail addresses & SKIDs of extant S/MIME public keys
-CERTS_TEMP="$CACHE_DIR/certs~temp.txt"
-if [[ ! -f "$CERTS_TEMP" ]] ; then
-	touch "$CERTS_TEMP"
-fi
-
-# preferences
-PREFS_DIR="${HOME}/Library/Preferences/"
-PREFS="local.lcars.dimago"
-PREFS_FILE="$PREFS_DIR/$PREFS.plist"
-if [[ ! -f "$PREFS_FILE" ]] ; then
-	touch "$PREFS_FILE"
-	/usr/bin/defaults write "$PREFS" localIDCreate -bool NO
-fi
+# S/MIME identity scan function
+id-scan () {
+	if [[ "$1" == "rescan" ]] ; then
+		notify "Please wait! Rescanning…" "Valid S/MIME identities"
+	else
+		notify "Please wait! Scanning…" "Valid S/MIME identities"
+	fi
+	POSIX_DATE=$(/bin/date +%s)
+	CURRENT_YEAR=$(/bin/date +%Y)
+	/usr/bin/defaults write "$PREFS" idScan "$POSIX_DATE"
+	/usr/bin/sqlite3 "$DB_LOC" "DELETE FROM Identities WHERE ROWID > -1;"
+	ID_LIST=$(/usr/bin/security find-identity -v -p smime)
+	echo "$ID_LIST" | while IFS= read -r IDENT
+	do
+		HASH=$(echo "$IDENT" | /usr/bin/awk '{print $2}')
+		NAME=$(echo "$IDENT" | /usr/bin/awk -F\" '{print $2}')
+		ALL_CERTS=$(/usr/bin/security find-certificate -c "$NAME" -a -p -Z)
+		COLLECT="false"
+		RECORD=""
+		echo "$ALL_CERTS" | while IFS= read -r LINE
+		do
+			SHAGREP=$(echo "$LINE" | /usr/bin/grep "SHA-1 hash:")
+			if [[ "$SHAGREP" != "" ]] ; then
+				CURRENT_HASH=$(echo "$SHAGREP" | /usr/bin/awk -F": " '{print $2}')
+				if [[ "$CURRENT_HASH" == "$HASH" ]] ; then
+					COLLECT="true"
+				else
+					COLLECT="false"
+				fi
+			fi
+			if [[ "$COLLECT" == "true" ]] ; then
+				RECORD="$RECORD
+$LINE"
+				if [[ $(echo "$RECORD" | /usr/bin/grep "END CERTIFICATE") != "" ]] ; then
+					RECORD=$(echo "$RECORD" | /usr/bin/sed '2d')
+					CERT_MAIL=$(echo "$RECORD" | /usr/bin/openssl x509 -inform PEM -noout -email 2>/dev/null)
+					if [[ "$CERT_MAIL" == "" ]] ; then
+						RECORD=""
+						continue
+					elif [[ "$CERT_MAIL" != *"@"*"."* ]] ; then
+						RECORD=""
+						continue
+					fi
+					PURPOSE_ALL=$(echo "$RECORD" | /usr/bin/openssl x509 -inform PEM -noout -purpose 2>/dev/null)
+					PURPOSE_CA=$(echo "$PURPOSE_ALL" | /usr/bin/grep "S/MIME encryption CA" | /usr/bin/awk -F: '{print $2}' | xargs)
+					if [[ "$PURPOSE_CA" == "Yes" ]] ; then
+						RECORD=""
+						continue
+					fi
+					PURPOSE=$(echo "$PURPOSE_ALL" | /usr/bin/grep "S/MIME encryption" | /usr/bin/awk -F: '{print $2}' | xargs)
+					if [[ "$PURPOSE" == "No" ]] ; then
+						RECORD=""
+						continue
+					fi
+					EXPIRES=$(echo "$RECORD" | /usr/bin/openssl x509 -inform PEM -checkend 3600)
+					if [[ "$EXPIRES" == "Certificate will expire" ]] ; then
+						RECORD=""
+						continue
+					else
+						UNTIL=$(echo "$RECORD" | /usr/bin/openssl x509 -inform PEM -noout -enddate 2>/dev/null | /usr/bin/awk -F"=" '{print $2}')
+						if [[ "$UNTIL" == "" ]] ; then
+							EXP_DATE=""
+						else
+							YEAR=$(echo "$UNTIL" | /usr/bin/awk '{print $4}' | xargs)
+							if [[ "$YEAR" == "$CURRENT_YEAR" ]] ; then
+								MONTH=$(echo "$UNTIL" | /usr/bin/awk '{print $1}' | xargs)
+								DAY=$(echo "$UNTIL" | /usr/bin/awk '{print $2}' | xargs)
+								EXP_DATE="$DAY $MONTH $YEAR"
+							else
+								EXP_DATE=""
+							fi
+						fi
+					fi
+					SKID=$(echo "$RECORD" | /usr/bin/openssl x509 -inform PEM -noout -text | /usr/bin/grep -A1 "Subject Key Identifier" | /usr/bin/tail -1 | xargs | /usr/bin/sed s/://g)
+					if [[ "$SKID" == "" ]] ; then
+						RECORD=""
+						continue
+					fi
+					if [[ "$NAME" == "DiMaGo Base Identity"* ]] ; then
+						NAME="$ACCOUNT"
+					else
+						if [[ "$NAME" == "" ]] ; then
+							NAME="n/a"
+						fi
+					fi
+					/usr/bin/sqlite3 "$DB_LOC" "insert into Identities (address,name,skid,expires) values (\"$CERT_MAIL\",\"$NAME\",\"$SKID\",\"$EXP_DATE\");"
+					RECORD=""
+				fi
+			fi
+		done
+	done
+}
 
 # detect/create icon for terminal-notifier and osascript windows
 ICON_LOC="$CACHE_DIR/lcars.png"
@@ -465,7 +650,7 @@ fi
 LOCAL_ID=$(/usr/bin/defaults read "$PREFS" localIDCreate 2>/dev/null)
 if [[ "$LOCAL_ID" != "1" ]] ; then
 
-	notify "Please wait! Generating…" "DiMaGo local S/MIME identity"
+	notify "Please wait! Generating…" "DiMaGo Base Identity"
 
 	NK_TEMP="$CACHE_DIR/newkey~temp"
 	if [[ ! -e "$NK_TEMP" ]] ; then
@@ -514,6 +699,38 @@ extendedKeyUsage=emailProtection"
 	/usr/bin/defaults write "$PREFS" localID "$NC_ADDR"
 fi
 
+# scan for S/MIME public keys & S/MIME identities; rescan after 30 days (pk-scan) & 90 days (id-scan)
+# Note: it's better to install the Launch Agent, which will scan three times a day in the background
+CURRENT_POSIX=$(/bin/date +%s)
+PK_LIST=$(/usr/bin/sqlite3 -list "$DB_LOC" "select ROWID, * from PublicKeys order by name COLLATE NOCASE ASC;" 2>/dev/null)
+if [[ "$PK_LIST" == "" ]] ; then
+	pk-scan
+	sleep 1
+	PK_LIST=$(/usr/bin/sqlite3 -list "$DB_LOC" "select ROWID, * from PublicKeys order by name COLLATE NOCASE ASC;" 2>/dev/null)
+else
+	LAST_PKSCAN=$(/usr/bin/defaults read "$PREFS" pkScan)
+	PK_DATEDIFF=$(/bin/expr $CURRENT_POSIX - $LAST_PKSCAN)
+	if [[ $PK_DATEDIFF -gt 2592000 ]] ; then
+		pk-scan rescan
+		sleep 1
+		PK_LIST=$(/usr/bin/sqlite3 -list "$DB_LOC" "select ROWID, * from PublicKeys order by name COLLATE NOCASE ASC;" 2>/dev/null)
+	fi
+fi
+ID_LIST=$(/usr/bin/sqlite3 -list "$DB_LOC" "select ROWID, * from Identities order by name COLLATE NOCASE ASC;" 2>/dev/null)
+if [[ "$ID_LIST" == "" ]] ; then
+	id-scan
+	sleep 1
+	ID_LIST=$(/usr/bin/sqlite3 -list "$DB_LOC" "select ROWID, * from Identities order by name COLLATE NOCASE ASC;" 2>/dev/null)
+else
+	LAST_IDSCAN=$(/usr/bin/defaults read "$PREFS" idScan)
+	ID_DATEDIFF=$(/bin/expr $CURRENT_POSIX - $LAST_IDSCAN)
+	if [[ $ID_DATEDIFF -gt 7776000 ]] ; then
+		id-scan rescan
+		sleep 1
+		ID_LIST=$(/usr/bin/sqlite3 -list "$DB_LOC" "select ROWID, * from Identities order by name COLLATE NOCASE ASC;" 2>/dev/null)
+	fi
+fi
+
 # check for update
 NEWEST_VERSION=$(/usr/bin/curl --silent https://api.github.com/repos/JayBrown/DiMaGo/releases/latest | /usr/bin/awk '/tag_name/ {print $2}' | xargs)
 if [[ "$NEWEST_VERSION" == "" ]] ; then
@@ -530,10 +747,9 @@ do
 
 TARGET_NAME=$(/usr/bin/basename "$FILEPATH")
 
-if [[ "$FILEPATH" == *".dmg" ]] || [[ "$FILEPATH" == *".sparsebundle" ]] || [[ "$FILEPATH" == *".sparseimage" ]] ; then # codesign or re-codesign disk image
+if [[ "$FILEPATH" == *".dmg" ]] || [[ "$FILEPATH" == *".sparsebundle" ]] || [[ "$FILEPATH" == *".sparseimage" ]] ; then # codesign or recodesign disk image
 
 	# check for codesigning certificates in the user's keychains
-	notify "Please wait! Searching…" "Code signing certificates"
 	CERTS=$(/usr/bin/security find-identity -v -p codesigning | /usr/bin/awk '{print substr($0, index($0,$3))}' | /usr/bin/sed -e '$d' -e 's/^"//' -e 's/"$//')
 	if [[ "$CERTS" != "" ]] ; then
 		CS_ABLE="true"
@@ -548,7 +764,7 @@ if [[ "$FILEPATH" == *".dmg" ]] || [[ "$FILEPATH" == *".sparsebundle" ]] || [[ "
 	fi
 
 	if [[ "$CS_ABLE" == "false" ]] ; then
-		notify "Error" "No codesigning certificates detected"
+		notify "Error: codesigning" "No identities detected"
 		exit
 	fi
 
@@ -557,10 +773,12 @@ if [[ "$FILEPATH" == *".dmg" ]] || [[ "$FILEPATH" == *".sparsebundle" ]] || [[ "
 	if [[ "$CS_TEST" == *"is not signed at all" ]] ; then
 		SIGN_INFO="codesign"
 		PREV_INFO="not codesigned"
+		TITLE_INFO="Codesign"
 	else
-		SIGN_INFO="re-codesign"
+		SIGN_INFO="recodesign"
 		PREV_SIG=$(echo "$CS_TEST" | /usr/bin/grep "Authority=" | /usr/bin/head -1 | /usr/bin/awk -F= '{print substr($0, index($0,$2))}')
 		PREV_INFO="$PREV_SIG"
+		TITLE_INFO="Recodesign"
 	fi
 
 	# ask user to (re)codesign DMG (only if the keychain contains CSCs)
@@ -580,7 +798,7 @@ tell application "System Events"
 	set theEncryption to button returned of (display dialog "$DIALOG_TXT" ¬
 		buttons {"No", "Yes"} ¬
 		default button 2 ¬
-		with title "DiMaGo" ¬
+		with title "DiMaGo: " & "$TITLE_INFO" ¬
 		with icon file theLogoPath ¬
 		giving up after 180)
 end tell
@@ -590,7 +808,7 @@ EOT)
 		if [[ "$CS_MULTI" == "false" ]] ; then
 			if [[ "$SIGN_INFO" == "codesign" ]] ; then
 				CS_RESULT=$(/usr/bin/codesign -s "$CERTS" -v "$FILEPATH" 2>&1)
-			elif [[ "$SIGN_INFO" == "re-codesign" ]] ; then
+			elif [[ "$SIGN_INFO" == "recodesign" ]] ; then
 				CS_RESULT=$(/usr/bin/codesign -f -s "$CERTS" -v "$FILEPATH" 2>&1)
 			fi
 		elif [[ "$CS_MULTI" == "true" ]] ; then # select CSC from list
@@ -603,7 +821,7 @@ tell application "System Events"
 		set theList to theList & {(anItem) as string}
 	end repeat
 	set AppleScript's text item delimiters to return & linefeed
-	set theResult to choose from list theList with prompt "Choose your codesigning identity." with title "DiMaGo" OK button name "Select" cancel button name "Cancel" without multiple selections allowed
+	set theResult to choose from list theList with prompt "Choose your codesigning identity." with title "DiMaGo: " & "$TARGET_NAME" OK button name "Select" cancel button name "Cancel" without multiple selections allowed
 	return the result as string
 	set AppleScript's text item delimiters to ""
 end tell
@@ -612,7 +830,7 @@ EOT)
 			if [[ "$CERT_CHOICE" != "" ]] && [[ "$CERT_CHOICE" != "false" ]] ; then
 				if [[ "$SIGN_INFO" == "codesign" ]] ; then
 					CS_RESULT=$(/usr/bin/codesign -s "$CERT_CHOICE" -v "$FILEPATH" 2>&1)
-				elif [[ "$SIGN_INFO" == "re-codesign" ]] ; then
+				elif [[ "$SIGN_INFO" == "recodesign" ]] ; then
 					CS_RESULT=$(/usr/bin/codesign -f -s "$CERT_CHOICE" -v "$FILEPATH" 2>&1)
 				fi
 			else
@@ -641,26 +859,14 @@ else # create disk image with DiMaGo
 		exit # ALT: continue
 	fi
 
-	echo -n "" > "$CERTS_TEMP"
+	# check if LaunchAgent is installed
+	if [[ -f "${HOME}/Library/LaunchAgents/local.lcars.DiMaGoScanner.plist" ]] ; then
+		AGENT="true"
+	fi
 
 	# remove .DS_Store file
 	if [[ -f "$FILEPATH/.DS_Store" ]] ; then
 		rm -rf "$FILEPATH/.DS_Store"
-	fi
-
-	# check for codesigning certificates in the user's keychains
-	notify "Please wait! Searching…" "Code signing certificates"
-	CERTS=$(/usr/bin/security find-identity -v -p codesigning | /usr/bin/awk '{print substr($0, index($0,$3))}' | /usr/bin/sed -e '$d' -e 's/^"//' -e 's/"$//')
-	if [[ "$CERTS" != "" ]] ; then
-		CS_ABLE="true"
-		CS_COUNT=$(echo "$CERTS" | /usr/bin/wc -l | xargs)
-		if [[ ($CS_COUNT>1) ]] ; then
-			CS_MULTI="true"
-		else
-			CS_MULTI="false"
-		fi
-	else
-		CS_ABLE="false"
 	fi
 
 	# select disk image type: dmg (read-only) or sparsebundle
@@ -668,10 +874,10 @@ else # create disk image with DiMaGo
 tell application "System Events"
 	activate
 	set theLogoPath to ((path to library folder from user domain) as text) & "Caches:local.lcars.dimago:lcars.png"
-	set theType to button returned of (display dialog "Choose the type of disk image to create from \"$TARGET_NAME\". Sparsebundles are best for dynamic storage and collaboration, DMGs for file distribution." ¬
+	set theType to button returned of (display dialog "Choose the type of disk image to create from the directory. Sparsebundles are best for dynamic storage and collaboration, DMGs for file distribution." ¬
 		buttons {"Cancel", "Read-Write Sparsebundle", "Read-Only DMG"} ¬
 		default button 3 ¬
-		with title "DiMaGo" ¬
+		with title "DiMaGo: " & "$TARGET_NAME" ¬
 		with icon file theLogoPath ¬
 		giving up after 180)
 end tell
@@ -695,7 +901,7 @@ tell application "System Events"
 		default answer "$TARGET_NAME" ¬
 		buttons {"Cancel", "Enter"} ¬
 		default button 2 ¬
-		with title "DiMaGo" ¬
+		with title "DiMaGo: " & "$TARGET_NAME" ¬
 		with icon file theLogoPath ¬
 		giving up after 180)
 end tell
@@ -720,7 +926,7 @@ tell application "System Events"
 		default answer "5" ¬
 		buttons {"Cancel", "Enter"} ¬
 		default button 2 ¬
-		with title "DiMaGo" ¬
+		with title "DiMaGo: " & "$VOL_NAME" ¬
 		with icon file theLogoPath ¬
 		giving up after 180)
 end tell
@@ -749,7 +955,7 @@ tell application "System Events"
 	set theEncryption to button returned of (display dialog "Do you want to encrypt the disk image?" ¬
 		buttons {"No", "AES-128", "AES-256"} ¬
 		default button 3 ¬
-		with title "DiMaGo" ¬
+		with title "DiMaGo: " & "$VOL_NAME" ¬
 		with icon file theLogoPath ¬
 		giving up after 180)
 end tell
@@ -773,7 +979,7 @@ tell application "System Events"
 	set theEncryption to button returned of (display dialog "Choose your encryption method." ¬
 		buttons {"Password Only", "Password & Public Key", "Public Key Only"} ¬
 		default button 3 ¬
-		with title "DiMaGo" ¬
+		with title "DiMaGo: " & "$VOL_NAME" ¬
 		with icon file theLogoPath ¬
 		giving up after 180)
 end tell
@@ -793,98 +999,92 @@ EOT)
 
 	if [[ "$ENCRYPT" == "true" ]] && [[ "$METHOD" != "pw" ]] && [[ "$METHOD" != "" ]] ; then
 
-		# search for valid S/MIME keys
-		notify "Please wait! Searching…" "Valid public S/MIME keys"
-		DIMAGO_LADDR=$(/usr/bin/defaults read "$PREFS" localID)
-		ALL_CERTS=$(/usr/bin/security find-certificate -a -p 2>/dev/null)
-		RECORD=""
-		echo "$ALL_CERTS" | while IFS= read -r LINE
-		do
-			RECORD="$RECORD
-$LINE"
-			if [[ $(echo "$RECORD" | /usr/bin/grep "END CERTIFICATE") != "" ]] ; then
-				RECORD=$(echo "$RECORD" | /usr/bin/sed '1d')
-				PURPOSE_ALL=$(echo "$RECORD" | /usr/bin/openssl x509 -inform PEM -noout -purpose 2>/dev/null)
-				PURPOSE_CA=$(echo "$PURPOSE_ALL" | /usr/bin/grep "S/MIME encryption CA" | /usr/bin/awk -F: '{print $2}' | xargs)
-				if [[ "$PURPOSE_CA" == "Yes" ]] ; then
-					RECORD=""
-					continue
-				fi
-				PURPOSE=$(echo "$PURPOSE_ALL" | /usr/bin/grep "S/MIME encryption" | /usr/bin/awk -F: '{print $2}' | xargs)
-				if [[ "$PURPOSE" == "No" ]] ; then
-					RECORD=""
-					continue
-				fi
-				CERT_MAIL=$(echo "$RECORD" | /usr/bin/openssl x509 -inform PEM -noout -email 2>/dev/null)
-				if [[ "$CERT_MAIL" == "" ]] ; then
-					RECORD=""
-					continue
-				elif [[ "$CERT_MAIL" == *"@dimago.local" ]] ; then
-					if [[ "$CERT_MAIL" != "$DIMAGO_LADDR" ]] ; then
-						RECORD=""
-						continue
-					fi
-				fi
-				EXPIRES=$(echo "$RECORD" | /usr/bin/openssl x509 -inform PEM -checkend 3600)
-				if [[ "$EXPIRES" == "Certificate will expire" ]] ; then
-					RECORD=""
-					continue
-				fi
-				SKID=$(echo "$RECORD" | /usr/bin/openssl x509 -inform PEM -noout -text | /usr/bin/grep -A1 "Subject Key Identifier" | /usr/bin/tail -1 | xargs | /usr/bin/sed s/://g)
-				if [[ "$SKID" == "" ]] ; then
-					RECORD=""
-					continue
-				fi
-				if [[ "$CERT_MAIL" == "$DIMAGO_LADDR" ]] ; then
-					CERT_CN="$ACCOUNT"
-				else
-					CERT_CN=$(echo "$RECORD" | /usr/bin/openssl x509 -inform PEM -noout -subject | /usr/bin/sed -n '/^subject/s/^.*CN=//p' | /usr/bin/awk -F"/emailAddress=" '{print $1}')
-					if [[ "$CERT_CN" == "" ]] ; then
-						CERT_CN="n/a"
-					fi
-				fi
-				echo "$CERT_MAIL [$CERT_CN]:::$SKID" >> "$CERTS_TEMP"
-				RECORD=""
+		# wait if LaunchAgent is running the background scan
+		if [[ "$AGENT" == "true" ]] ; then
+			if [[ $(/bin/launchctl list | /usr/bin/grep "local.lcars.DiMaGoScanner" | /usr/bin/awk '{print $1}') != "-" ]] ; then
+				notify "Waiting for LaunchAgent" "Background scan needs to finish…"
+				AGENT_STATUS=""
+				until [[ "$AGENT_STATUS" == "-" ]]
+				do
+					AGENT_STATUS=$(/bin/launchctl list | /usr/bin/grep "local.lcars.DiMaGoScanner" | /usr/bin/awk '{print $1}')
+					sleep 2
+				done
+				PK_LIST=$(/usr/bin/sqlite3 -list "$DB_LOC" "select ROWID, * from PublicKeys order by name COLLATE NOCASE ASC;" 2>/dev/null)
 			fi
-		done
-		CERT_DIGEST=$(/bin/cat "$CERTS_TEMP" | /usr/bin/sort -f)
-		if [[ "$CERT_DIGEST" == "" ]] ; then
+		fi
+
+		# build public key list
+		ALL_SMIME=""
+		while IFS= read -r RECORD
+		do
+			RECID=$(echo "$RECORD" | /usr/bin/awk -F\| '{print $1}')
+			ADDR=$(echo "$RECORD" | /usr/bin/awk -F\| '{print $2}')
+			NAME=$(echo "$RECORD" | /usr/bin/awk -F\| '{print $3}')
+			EXP_DATE=$(echo "$RECORD" | /usr/bin/awk -F\| '{print $5}')
+			if [[ "$EXP_DATE" != "" ]] ; then
+				EXP_INFO=" ⚠️ expires: $EXP_DATE"
+			else
+				EXP_INFO=""
+			fi
+			PK_ADD="$NAME [$RECID] <$ADDR>$EXP_INFO"
+			ALL_SMIME="$ALL_SMIME
+$PK_ADD"
+		done <<< "$(echo -e "$PK_LIST")"
+		ALL_SMIME=$(echo "$ALL_SMIME" | /usr/bin/tail -n +2)
+
+		if [[ "$ALL_SMIME" == "" ]] ; then
 			KEY_RETURN="false"
 		else
 			KEY_RETURN="true"
 
 			# select email address(es) to encrypt disk image
-			ALL_SMIME=$(echo "$CERT_DIGEST" | /usr/bin/awk -F":::" '{print $1}')
-			KEY_ADDR=$(/usr/bin/osascript 2>/dev/null << EOT
+			BREAKER=""
+			KEY_CHOSEN="false"
+			until [[ "$KEY_CHOSEN" == "true" ]] ; do
+				KEY_ADDR=$(/usr/bin/osascript 2>/dev/null << EOT
 tell application "System Events"
 	activate
 	set theList to {}
-	set theItems to paragraphs of "$ALL_SMIME"
+	set theItems to paragraphs of "$ALL_SMIME" & "🔍 Rescan public S/MIME keys"
 	repeat with anItem in theItems
 		set theList to theList & {(anItem) as string}
 	end repeat
 	set AppleScript's text item delimiters to return & linefeed
-	set theResult to choose from list theList with prompt "Choose the email address(es). The public key(s) will be used to encrypt the disk image." with title "DiMaGo" OK button name "Select" cancel button name "Cancel" with multiple selections allowed
+	set theResult to choose from list theList with prompt "Choose the email address(es). The public key(s) will be used to encrypt the disk image." with title "DiMaGo: " & "$VOL_NAME" OK button name "Select" cancel button name "Cancel" with multiple selections allowed
 	set AppleScript's text item delimiters to ""
 end tell
 theResult
 EOT)
-			if [[ "$KEY_ADDR" == "" ]] || [[ "$KEY_ADDR" == "false" ]] ; then
-				exit # ALT: continue
-			else
-				KEY_RETURN="true"
-				SKID_ROW=""
-				ENCRYPT_INFO=""
-				for ADDRESS in $(echo "$KEY_ADDR" | /usr/bin/grep -Eo '[^ ]*@[^ ]*')
-				do
-					FINAL_SKID=$(echo "$CERT_DIGEST" | /usr/bin/grep "$ADDRESS" | /usr/bin/awk -F":::" '{print $2}')
-					SKID_ROW="$SKID_ROW$FINAL_SKID,"
-					ENCRYPT_INFO="$ENCRYPT_INFO$ADDRESS
+				if [[ "$KEY_ADDR" == "" ]] || [[ "$KEY_ADDR" == "false" ]] ; then
+					BREAKER="true"
+					KEY_CHOSEN="true"
+					break
+				elif [[ $(echo "$KEY_ADDR" | /usr/bin/grep "Rescan public S/MIME keys") != "" ]] ; then
+					KEY_CHOSEN="false"
+					pk-scan rescan
+					sleep 1
+					PK_LIST=$(/usr/bin/sqlite3 -list "$DB_LOC" "select ROWID, * from PublicKeys order by name COLLATE NOCASE ASC;" 2>/dev/null)
+					continue
+				else
+					KEY_RETURN="true"
+					SKID_ROW=""
+					ENCRYPT_INFO=""
+					IFS=, ; for RECORD in $(echo "$KEY_ADDR")
+					do
+						RECID=$(echo "$RECORD" | /usr/bin/cut -d "[" -f2 | /usr/bin/cut -d "]" -f1)
+						FINAL_SKID=$(/usr/bin/sqlite3 -list "$DB_LOC" "select skid from PublicKeys WHERE ROWID = $RECID ;")
+						FINAL_ADDR=$(/usr/bin/sqlite3 -list "$DB_LOC" "select address from PublicKeys WHERE ROWID = $RECID ;")
+						SKID_ROW="$SKID_ROW$FINAL_SKID,"
+						ENCRYPT_INFO="$ENCRYPT_INFO$FINAL_ADDR
 $FINAL_SKID
 "
-				done
-				SKID_ROW=$(echo "$SKID_ROW" | /usr/bin/sed 's/,*$//g')
-				echo "$SKID_ROW"
+					done
+					SKID_ROW=$(echo "$SKID_ROW" | /usr/bin/sed 's/,*$//g')
+					KEY_CHOSEN="true"
+				fi
+			done
+			if [[ "$BREAKER" == "true" ]] ; then
+				exit # ALT: continue
 			fi
 		fi
 	fi
@@ -904,7 +1104,7 @@ tell application "System Events"
 		default answer "" ¬
 		buttons {"Random", "Enter"} ¬
 		default button 2 ¬
-		with title "DiMaGo" ¬
+		with title "DiMaGo: " & "$VOL_NAME" ¬
 		with icon file theLogoPath ¬
 		giving up after 180)
 end tell
@@ -933,7 +1133,7 @@ tell application "System Events"
 		default answer "" ¬
 		buttons {"Enter"} ¬
 		default button 1 ¬
-		with title "DiMaGo" ¬
+		with title "DiMaGo: " & "$VOL_NAME" ¬
 		with icon file theLogoPath ¬
 		giving up after 180)
 end tell
@@ -968,7 +1168,7 @@ tell application "System Events"
 		default answer "$TARGET_NAME.$TYPE" ¬
 		buttons {"Cancel", "Enter"} ¬
 		default button 2 ¬
-		with title "DiMaGo" ¬
+		with title "DiMaGo: " & "$VOL_NAME" ¬
 		with icon file theLogoPath ¬
 		giving up after 180)
 end tell
@@ -987,9 +1187,9 @@ EOT)
 tell application "System Events"
 	activate
 	set theLogoPath to ((path to library folder from user domain) as text) & "Caches:local.lcars.dimago:lcars.png"
-	set theOverwrite to button returned of (display dialog "A disk image named $DMG_NAME already exists in your destination folder. Do you want to replace it with the one you're creating, or do you want to rename the new disk image? " ¬
+	set theOverwrite to button returned of (display dialog "A disk image with that name already exists in your destination folder. Do you want to replace it with the one you're creating, or do you want to rename the new disk image? " ¬
 		buttons {"Cancel", "Rename", "Replace"} ¬
-		with title "DiMaGo" ¬
+		with title "DiMaGo: " & "$DMG_NAME" ¬
 		with icon file theLogoPath ¬
 		giving up after 180)
 end tell
@@ -1039,6 +1239,20 @@ EOT)
 		fi
 	fi
 
+	# sneak in CSC scan
+	CERTS=$(/usr/bin/security find-identity -v -p codesigning | /usr/bin/awk '{print substr($0, index($0,$3))}' | /usr/bin/sed -e '$d' -e 's/^"//' -e 's/"$//')
+	if [[ "$CERTS" != "" ]] ; then
+		CS_ABLE="true"
+		CS_COUNT=$(echo "$CERTS" | /usr/bin/wc -l | xargs)
+		if [[ ($CS_COUNT>1) ]] ; then
+			CS_MULTI="true"
+		else
+			CS_MULTI="false"
+		fi
+	else
+		CS_ABLE="false"
+	fi
+
 	# creation successful?
 	echo "$CREATE"
 	if [[ $(echo "$CREATE" | /usr/bin/grep "hdiutil: create failed") != "" ]] ; then
@@ -1079,7 +1293,11 @@ EOT)
 	if [[ "$ENCRYPT_INFO" == "" ]] ; then
 		ENCRYPT_INFO="none"
 	fi
-	COMMENT="UUID:
+	CURRENT_DATE=$(/bin/date)
+	COMMENT="Created:
+$CURRENT_DATE
+
+UUID:
 $UUID_INFO
 
 SHA-256:
@@ -1097,7 +1315,7 @@ tell application "System Events"
 	set theLogoPath to ((path to library folder from user domain) as text) & "Caches:local.lcars.dimago:lcars.png"
 	set thePasswordStore to button returned of (display dialog "DiMaGo will now store the encryption information in your DiMaGo keychain. What do you want to do with your randomly generated passphrase?" ¬
 		buttons {"Copy to Clipboard", "Store in Keychain"} ¬
-		with title "DiMaGo" ¬
+		with title "DiMaGo: " & "$DMG_NAME" ¬
 		with icon file theLogoPath ¬
 		giving up after 180)
 end tell
@@ -1110,7 +1328,7 @@ tell application "System Events"
 	set theLogoPath to ((path to library folder from user domain) as text) & "Caches:local.lcars.dimago:lcars.png"
 	set thePasswordStore to button returned of (display dialog "DiMaGo will now store the encryption information in your DiMaGo keychain. What do you want to do with your passphrase?" ¬
 		buttons {"Nothing", "Copy to Clipboard", "Store in Keychain"} ¬
-		with title "DiMaGo" ¬
+		with title "DiMaGo: " & "$DMG_NAME" ¬
 		with icon file theLogoPath ¬
 		giving up after 180)
 end tell
@@ -1152,7 +1370,7 @@ EOT)
 		else
 			CERT_TEXT=""
 		fi
-		DIALOG_TXT="Do you want to $CERT_TEXT to codesign the disk image $DMG_NAME?"
+		DIALOG_TXT="Do you want to $CERT_TEXT to codesign the disk image?"
 		CS_CHOICE=$(/usr/bin/osascript 2>/dev/null << EOT
 tell application "System Events"
 	activate
@@ -1160,7 +1378,7 @@ tell application "System Events"
 	set theEncryption to button returned of (display dialog "$DIALOG_TXT" ¬
 		buttons {"No", "Yes"} ¬
 		default button 2 ¬
-		with title "DiMaGo" ¬
+		with title "DiMaGo: " & "$DMG_NAME" ¬
 		with icon file theLogoPath ¬
 		giving up after 180)
 end tell
@@ -1177,7 +1395,7 @@ tell application "System Events"
 		set theList to theList & {(anItem) as string}
 	end repeat
 	set AppleScript's text item delimiters to return & linefeed
-	set theResult to choose from list theList with prompt "Choose your codesigning identity." with title "DiMaGo" OK button name "Select" cancel button name "Cancel" without multiple selections allowed
+	set theResult to choose from list theList with prompt "Choose your codesigning identity." with title "DiMaGo: " & "$DMG_NAME" OK button name "Select" cancel button name "Cancel" without multiple selections allowed
 	return the result as string
 	set AppleScript's text item delimiters to ""
 end tell
@@ -1259,15 +1477,85 @@ EOT)
 			SEG="false"
 		fi
 
-		# read DiMaGo base identity SKID from preferences
-		DIMAGO_LSKID=$(/usr/bin/defaults read "$PREFS" localSKID 2>/dev/null)
-		if [[ "$DIMAGO_LSKID" == "" ]] ; then
-			DIMAGO_LADDR=$(/usr/bin/defaults read "$PREFS" localID 2>/dev/null)
-			if [[ "$DIMAGO_LADDR" == "" ]] ; then
-				exit # ALT: continue
+		# wait if LaunchAgent is running the background scan
+		if [[ "$AGENT" == "true" ]] ; then
+			if [[ $(/bin/launchctl list | /usr/bin/grep "local.lcars.DiMaGoScanner" | /usr/bin/awk '{print $1}') != "-" ]] ; then
+				notify "Waiting for LaunchAgent" "Background scan needs to finish…"
+				AGENT_STATUS=""
+				until [[ "$AGENT_STATUS" == "-" ]]
+				do
+					AGENT_STATUS=$(/bin/launchctl list | /usr/bin/grep "local.lcars.DiMaGoScanner" | /usr/bin/awk '{print $1}')
+					sleep 2
+				done
+				ID_LIST=$(/usr/bin/sqlite3 -list "$DB_LOC" "select ROWID, * from Identities order by name COLLATE NOCASE ASC;" 2>/dev/null)
 			fi
-			DIMAGO_LSKID=$(/usr/bin/security find-certificate -e "$DIMAGO_LADDR" | /usr/bin/grep "hpky" | /usr/bin/awk '{print $1;}' | /usr/bin/sed 's/^.*x//')
-			/usr/bin/defaults write "$PREFS" localSKID "$DIMAGO_LSKID"
+		fi
+
+		# build identities list
+		ALL_IDS=""
+		while IFS= read -r RECORD
+		do
+			RECID=$(echo "$RECORD" | /usr/bin/awk -F\| '{print $1}')
+			ADDR=$(echo "$RECORD" | /usr/bin/awk -F\| '{print $2}')
+			NAME=$(echo "$RECORD" | /usr/bin/awk -F\| '{print $3}')
+			EXP_DATE=$(echo "$RECORD" | /usr/bin/awk -F\| '{print $5}')
+			if [[ "$EXP_DATE" != "" ]] ; then
+				EXP_INFO=" ⚠️ expires: $EXP_DATE"
+			else
+				EXP_INFO=""
+			fi
+			ID_ADD="$NAME [$RECID] <$ADDR>$EXP_INFO"
+			ALL_IDS="$ALL_IDS
+$ID_ADD"
+		done <<< "$(echo -e "$ID_LIST")"
+		ALL_IDS=$(echo "$ALL_IDS" | /usr/bin/tail -n +2)
+
+		# user selects ID to sign the checksum file
+		BREAKER=""
+		ID_CHOSEN="false"
+		until [[ "$ID_CHOSEN" == "true" ]] ; do
+			ID_ADDR=$(/usr/bin/osascript 2>/dev/null << EOT
+tell application "System Events"
+	activate
+	set theList to {}
+	set theItems to paragraphs of "$ALL_IDS" & "🔍 Rescan S/MIME identities"
+	repeat with anItem in theItems
+		set theList to theList & {(anItem) as string}
+	end repeat
+	set AppleScript's text item delimiters to return & linefeed
+	set theResult to choose from list theList with prompt "Choose your identity to sign the checksum file. Cancel to use your DiMaGo Base Identity." with title "DiMaGo: " & "$DMG_NAME" OK button name "Select" cancel button name "Cancel" without multiple selections allowed
+	set AppleScript's text item delimiters to ""
+end tell
+theResult
+EOT)
+			if [[ "$ID_ADDR" == "" ]] || [[ "$ID_ADDR" == "false" ]] ; then
+				BREAKER="true"
+				ID_CHOSEN="true"
+				break
+			elif [[ $(echo "$ID_ADDR" | /usr/bin/grep "Rescan S/MIME identities") != "" ]] ; then
+				ID_CHOSEN="false"
+				id-scan rescan
+				sleep 1
+				ID_LIST=$(/usr/bin/sqlite3 -list "$DB_LOC" "select ROWID, * from Identities order by name COLLATE NOCASE ASC;" 2>/dev/null)
+				continue
+			else
+				ID_RETURN="true"
+				RECID=$(echo "$ID_ADDR" | /usr/bin/cut -d "[" -f2 | /usr/bin/cut -d "]" -f1)
+				ID_SKID=$(/usr/bin/sqlite3 -list "$DB_LOC" "select skid from Identities WHERE ROWID = $RECID ;")
+				ID_CHOSEN="true"
+			fi
+		done
+
+		if [[ "$BREAKER" == "true" ]] ; then
+			ID_SKID=$(/usr/bin/defaults read "$PREFS" localSKID 2>/dev/null)
+			if [[ "$ID_SKID" == "" ]] ; then
+				DIMAGO_LADDR=$(/usr/bin/defaults read "$PREFS" localID 2>/dev/null)
+				if [[ "$DIMAGO_LADDR" == "" ]] ; then
+					exit # ALT: continue
+				fi
+				ID_SKID=$(/usr/bin/security find-certificate -e "$DIMAGO_LADDR" | /usr/bin/grep "hpky" | /usr/bin/awk '{print $1;}' | /usr/bin/sed 's/^.*x//')
+				/usr/bin/defaults write "$PREFS" localSKID "$ID_SKID"
+			fi
 		fi
 
 		if [[ "$SEG" == "true" ]] ; then # generate checksums for segments, write to CMS and create verify & join command
@@ -1284,7 +1572,7 @@ $SEGSUM"
 			HASH_INFO=$(echo "$HASH_INFO" | /usr/bin/tail -n +2)
 			echo "$HASH_INFO" > "$SEG_DIR/$SEG_DIR_NAME.sha256.txt"
 
-			/usr/bin/security cms -S -i "$SEG_DIR/$SEG_DIR_NAME.sha256.txt" -Z "$DIMAGO_LSKID" -G -H SHA256 -P -o "$SEG_DIR/$SEG_DIR_NAME~segments.sha256.cms"
+			/usr/bin/security cms -S -i "$SEG_DIR/$SEG_DIR_NAME.sha256.txt" -Z "$ID_SKID" -G -H SHA256 -P -o "$SEG_DIR/$SEG_DIR_NAME~segments.sha256.cms"
 			rm -rf "$SEG_DIR/$SEG_DIR_NAME.sha256.txt"
 
 			CMD_LOC="$SEG_DIR/$DMG_NAME.join.command"
@@ -1300,13 +1588,16 @@ if [ ! -f "$DIR/"*"~segments.sha256.cms" ] ; then
 else
 	echo "Found CMS file"
 	echo "Verifying with signature..."
+	FULL_DIGEST=$(/usr/bin/security cms -D -h 1 -i "$DIR/"*"~segments.sha256.cms" 2>&1)
 	DIGEST=$(/usr/bin/security cms -D -i "$DIR/"*"~segments.sha256.cms" 2>&1)
 	if [ "$(echo "$DIGEST" | /usr/bin/grep "security: ")" != "" ] ; then
 		VERIFY="false"
 		echo "$DIGEST"
 		echo "Result: CMS corrupted"
 	else
+		SIGNER=$(echo "$FULL_DIGEST" | /usr/bin/grep "signer0.id=" | /usr/bin/awk -F\" '{print $2}')
 		echo "Verification done. OK."
+		echo "Signed by: $SIGNER"
 		echo "Verifying checksums..."
 		VERIFY="true"
 		while IFS= read -r RECORD
@@ -1372,7 +1663,7 @@ EOT)
 			touch "$TARGET_PARENT/$DMG_NAME.sha256.txt"
 			echo "$HASH_INFO" > "$TARGET_PARENT/$DMG_NAME.sha256.txt"
 
-			/usr/bin/security cms -S -i "$TARGET_PARENT/$DMG_NAME.sha256.txt" -Z "$DIMAGO_LSKID" -G -H SHA256 -P -o "$TARGET_PARENT/$DMG_NAME.sha256.cms"
+			/usr/bin/security cms -S -i "$TARGET_PARENT/$DMG_NAME.sha256.txt" -Z "$ID_SKID" -G -H SHA256 -P -o "$TARGET_PARENT/$DMG_NAME.sha256.cms"
 			rm -rf "$TARGET_PARENT/$DMG_NAME.sha256.txt"
 
 			CMD_LOC="$TARGET_PARENT/$DMG_NAME.verify.command"
@@ -1388,13 +1679,16 @@ if [ ! -f "$DIR/"*".sha256.cms" ] ; then
 else
 	echo "Found CMS file"
 	echo "Verifying with signature..."
+	FULL_DIGEST=$(/usr/bin/security cms -D -h 1 -i "$DIR/"*".sha256.cms" 2>&1)
 	DIGEST=$(/usr/bin/security cms -D -i "$DIR/"*".sha256.cms" 2>&1)
 	if [ "$(echo "$DIGEST" | /usr/bin/grep "security: ")" != "" ] ; then
 		VERIFY="false"
 		echo "$DIGEST"
 		echo "Result: CMS corrupted"
 	else
+		SIGNER=$(echo "$FULL_DIGEST" | /usr/bin/grep "signer0.id=" | /usr/bin/awk -F\" '{print $2}')
 		echo "Verification done. OK."
+		echo "Signed by: $SIGNER"
 		echo "Verifying checksum..."
 		NAME=$(echo "$DIGEST" | rev | /usr/bin/awk -F= '{print $2}' | rev | sed -n 's/.*(//;s/).*//p')
 		FULLPATH="$DIR/$NAME"
