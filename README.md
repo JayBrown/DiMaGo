@@ -16,43 +16,6 @@ S/MIME protection of disk images will not help you if you're compelled to reveal
 
 Such a master–slave setup is also great for corporate settings, e.g. if a system administrator wants to provide employees with an encrypted read-write sparsebundle; in most cases the passphrase is only known to the employee, which he has to type in himself, but the admin will still have a recovery option using the admin S/MIME key on his own computer. In an alternate approach the admin can also create an S/MIME certificate chain for the employee, and keep a copy for himself.
 
-## Current status
-Beta: it works (apparently), but it will remain in beta status until the DiMaGo verification script/workflow has been created
-
-## Prerequisites for full functionality [optional, recommended]
-* [terminal-notifier](https://github.com/alloy/terminal-notifier)
-
-### Installation method #1
-Install using [Homebrew](http://brew.sh) with `brew install terminal-notifier` (or with a similar manager)
-
-### Installation method #2
-* move the terminal-notifier zip archive from the DiMaGo disk image to a folder on your main volume
-* unzip the application and move it to a suitable location, e.g. to `/Applications`, `/Applications/Utilities`, or `$HOME/Applications`
-
-### terminal-notifier: general notes
-You need to have Spotlight enabled for `mdfind` to locate the terminal-notifier.app on your volume; if you don't install terminal-notifier, or if you have deactivated Spotlight, the DiMaGo scripts will call notifications via AppleScript instead
-
-## Installation
-* [Download the latest DMG](https://github.com/JayBrown/DiMaGo/releases) and open
-
-### Workflow
-* Double-click on the workflow file to install
-* If you encounter problems, open it with Automator and save/install from there
-* Standard Finder integration in the Services menu
-
-### Launch Agent [optional, recommended]
-* Move the **helper script** `dimago-scan.sh` into `/usr/local/bin`
-* In your shell enter `chmod +x /usr/local/bin/dimago-scan.sh`
-* Move the **agent** `local.lcars.DiMaGoScanner.plist` into `$HOME/Library/LaunchAgents`
-* In your shell enter `launchctl load $HOME/Library/LaunchAgents/local.lcars.DiMaGoScanner.plist`
-
-### Main shell script [optional]
-* Move the script `dimago-create.sh` to `/usr/local/bin`
-* In your shell enter `chmod +x /usr/local/bin/dimago-create.sh`
-* Run the script with `dimago-create.sh /path/to/target`
-
-Only necessary if for some reason you want to run this from the shell or another shell script. For normal use the workflow will be sufficient.
-
 ## Functionality
 * creates two types of disk images, read-only DMGs or read/write growable sparsebundles, from a source folder
 * asks user for disk image's volume name and basename
@@ -108,6 +71,42 @@ Only necessary if for some reason you want to run this from the shell or another
 * When using more than approx. 8 or 9 SKIDs to encrypt a disk image (password or no password), `hdiutil` crashes with multiple instances of the above stderr; then the disk image is *not* created
 
 This is sadly *not* a **DiMaGo** bug, which I would be able to fix, but apparently due to bad Objective-C coding on **Apple**'s part.
+
+## Current status
+Beta: it works (apparently), but it will remain in beta status until the DiMaGo verification script/workflow has been created
+
+## Installation
+* [Download the latest DMG](https://github.com/JayBrown/DiMaGo/releases) and open
+
+### Workflow
+* Double-click on the workflow file to install
+* If you encounter problems, open it with Automator and save/install from there
+* Standard Finder integration in the Services menu
+
+### Launch Agent [optional, recommended]
+* Move the **helper script** `dimago-scan.sh` into `/usr/local/bin`
+* In your shell enter `chmod +x /usr/local/bin/dimago-scan.sh`
+* Move the **agent** `local.lcars.DiMaGoScanner.plist` into `$HOME/Library/LaunchAgents`
+* In your shell enter `launchctl load $HOME/Library/LaunchAgents/local.lcars.DiMaGoScanner.plist`
+
+### terminal-notifier [optional, recommended]
+More information: [terminal-notifier](https://github.com/alloy/terminal-notifier)
+
+You need to have Spotlight enabled for `mdfind` to locate the terminal-notifier.app on your volume; if you don't install terminal-notifier, or if you have deactivated Spotlight, the DiMaGo scripts will call notifications via AppleScript instead
+
+#### Installation method #1
+Install using [Homebrew](http://brew.sh) with `brew install terminal-notifier` (or with a similar manager)
+
+#### Installation method #2
+* move the terminal-notifier zip archive from the DiMaGo disk image to a folder on your main volume
+* unzip the application and move it to a suitable location, e.g. to `/Applications`, `/Applications/Utilities`, or `$HOME/Applications`
+
+### Main shell script [optional]
+Only necessary if for some reason you want to run this from the shell or another shell script. For normal use the workflow will be sufficient.
+
+* Move the script `dimago-create.sh` to `/usr/local/bin`
+* In your shell enter `chmod +x /usr/local/bin/dimago-create.sh`
+* Run the script with `dimago-create.sh /path/to/target`
 
 ## Uninstall
 Remove the following files or folders:
