@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>Disabled</key>
+	<false/>
 	<key>Label</key>
 	<string>local.lcars.DiMaGoScanner</string>
 	<key>LowPriorityBackgroundIO</key>
@@ -10,6 +12,8 @@
 	<true/>
 	<key>Nice</key>
 	<integer>20</integer>
+	<key>ProcessType</key>
+	<string>Background</string>
 	<key>Program</key>
 	<string>/usr/local/bin/dimago-scan.sh</string>
 	<key>StandardErrorPath</key>

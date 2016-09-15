@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# DiMaGo v1.5.0 (beta)
+# DiMaGo v1.5.1 (beta)
 # DiMaGo ➤ Create (shell script version)
 #
 # Note: DiMaGo will remain in beta status until DiMaGo ➤ Verify has been scripted
@@ -8,7 +8,7 @@
 LANG=en_US.UTF-8
 export PATH=/usr/local/bin:$PATH
 ACCOUNT=$(/usr/bin/id -un)
-CURRENT_VERSION="1.50"
+CURRENT_VERSION="1.51"
 
 # check compatibility
 MACOS2NO=$(/usr/bin/sw_vers -productVersion | /usr/bin/awk -F. '{print $2}')
@@ -42,6 +42,7 @@ if [[ ! -f "$PREFS_FILE" ]] ; then
 	touch "$PREFS_FILE"
 	/usr/bin/defaults write "$PREFS" localIDCreate -bool NO
 fi
+/usr/bin/defaults write "$PREFS" userAccount "$ACCOUNT"
 
 # database
 DB_LOC="$CACHE_DIR/DiMaGo.db"
@@ -1154,8 +1155,18 @@ EOT)
 		done
 	fi
 
-	# enter image basename
+	# check if target directory is not writable
 	TARGET_PARENT=$(/usr/bin/dirname "$FILEPATH")
+	if [[ ! -w "$TARGET_PARENT" ]] ; then
+		TARGET_PARENT="${HOME}"
+		GOHOME="true"
+		BASE_INFO=" It will be created in your home folder, because the working directory is not writable for $ACCOUNT."
+	else
+		GOHOME=""
+		BASE_INFO=""
+	fi
+
+	# enter image basename
 	OV_RETURN=""
 	BREAKER=""
 	until [[ "$OV_RETURN" == "true" ]]
@@ -1164,7 +1175,7 @@ EOT)
 tell application "System Events"
 	activate
 	set theLogoPath to ((path to library folder from user domain) as text) & "Caches:local.lcars.dimago:lcars.png"
-	set theBaseName to text returned of (display dialog "Enter the disk image's basename." ¬
+	set theBaseName to text returned of (display dialog "Enter the disk image's basename.$BASE_INFO" ¬
 		default answer "$TARGET_NAME.$TYPE" ¬
 		buttons {"Cancel", "Enter"} ¬
 		default button 2 ¬
@@ -1727,6 +1738,12 @@ EOT)
 			/bin/chmod u+x "$CMD_LOC"
 		fi
 	fi
+
+	# open user's home folder if original target directory is not writable
+	if [[ "$GOHOME" == "true" ]] ; then
+		open "$TARGET_PARENT"
+	fi
+
 fi
 
 done

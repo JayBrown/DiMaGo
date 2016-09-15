@@ -1,20 +1,22 @@
 #!/bin/bash
 
-# DiMaGo v1.5.0 (beta)
-# dimago-scan.sh (shell script version)
-#
-# Note: DiMaGo will remain in beta status until DiMaGo ➤ Verify has been scripted
+# DiMaGo
+# dimago-scan.sh v1.0.1
 
 LANG=en_US.UTF-8
 export PATH=/usr/local/bin:$PATH
-ACCOUNT=$(/usr/bin/id -un)
-if [[ "$ACCOUNT" == "root" ]] ; then
-	echo "Process running with root privileges"
-	echo "Exiting..."
-	exit 1
-fi
 
 PREFS="local.lcars.dimago"
+
+ACCOUNT=$(/usr/bin/id -un)
+if [[ "$ACCOUNT" == "root" ]] ; then
+	MAIN_ACCOUNT=$(/usr/bin/defaults read "$PREFS" userAccount 2>/dev/null)
+	if [[ "$MAIN_ACCOUNT" != "root" ]] ; then
+		echo "Process running with root privileges"
+		echo "Exiting..."
+		exit 1
+	fi
+fi
 
 FIRST_RUN=$(/usr/bin/defaults read "$PREFS" localIDCreate 2>/dev/null)
 if [[ "$FIRST_RUN" != "1" ]] ; then
