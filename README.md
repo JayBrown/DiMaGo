@@ -133,6 +133,6 @@ Note: the two files in `/private/tmp` are temporary log files; macOS will remove
 
 ## What I want (eventually)
 * is for someone to "steal" this idea and give us a great GUI-based software; **DropDMG** is great, but it lacks a lot of the necessary features
-* is a cross-platform (macOS/Win/Linux/BSD) solution for mountable read-only and read/write disk images, including cross-platform sparsebundles, formattable in whatever file system the user selects, securely encrypted with (multiple) S/MIME, i.e. a user-friendly modern alternative to the old PGPdisk, and on steroids of course 💪
+* is a cross-platform (macOS/Win/Linux/BSD/iOS/Android) solution for mountable read-only and (especially) read/write disk images, including cross-platform sparsebundles, formattable in whatever file system the user selects (anything from NTFS to Btrfs to APFS), securely encrypted with (multiple) S/MIME and optional password-protection, i.e. a user-friendly modern alternative to the old PGPdisk, and on steroids of course 💪
 
 So yeah, we can encrypt email messages with S/MIME, but let's take it to the next level. We should. If my wishes above don't come true, you are welcome to improve the DiMaGo script, which would benefit at least macOS users; I'm not a great programmer, I just manage to make things work somehow, but information security is important to me, *very important*, but it's only relevant, if we can make it accessible and keep it easy for the average user
