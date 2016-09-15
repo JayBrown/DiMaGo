@@ -84,8 +84,7 @@ Only necessary if for some reason you want to run this from the shell or another
 * uses the macOS Notification Center, so the minimum Mac OS requirement is **OS X 10.8 (Mountain Lion)**
 
 ## Up next
-* check if target's parent directory is writable; if not, write disk image to `$HOME`
-* add background process key to LaunchAgent plist
+* option to append date to disk image basename
 
 ## Planned functionality (this might take a while)
 * **second workflow/script to verify and trust certificates used to codesign a disk image**
