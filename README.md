@@ -12,9 +12,9 @@ If you encrypt a DMG or sparsebundle with a public S/MIME key, only a user in po
 
 As with S/MIME-encrypted email messages, after an S/MIME certificate used to encrypt a disk image has expired, you will still be able to mount the encrypted volume in the Finder, as long as you do not delete the expired certificate from your keychain.
 
-S/MIME protection of disk images will not help you if you're compelled to reveal the contents of your computer. In these cases, once you've provided authorities with the macOS login password, your keychains are unlocked (at least with macOS default settings), and so are your encrypted volumes, once an agent clicks on them, either because the private S/MIME encryption key is still in your login keychain, or because you have chosen to store the disk image passphrase in your DiMaGo keychain. You can easily evade this problem if you create a disk image encrypted with both S/MIME and a password, but on a *different* Mac. On this master Macintosh you can store the S/MIME certificate chain and (optionally) the passphrase in your DiMaGo keychain. Then all you need to do is copy the disk image sans certificate to your main Mac (slave Macintosh), where you are only to use the passphrase to mount the encrypted volume. Just be sure that you do not store the disk image password in the keychain of your slave Macintosh, because that would defeat the purpose.
+S/MIME protection of disk images will not help you if you're compelled to reveal the contents of your computer. In these cases, once you've provided authorities with the macOS login password, your keychains are unlocked (at least with macOS default settings), and so are your encrypted volumes, once an agent clicks on them, either because the private S/MIME key is still in your login keychain, or because you have chosen to store the disk image passphrase in your DiMaGo keychain. You can easily evade this problem if you create a disk image encrypted with both S/MIME and a password, but on a *different* Mac. On this master Macintosh you can store the S/MIME certificate chain and (optionally) the passphrase in your DiMaGo keychain. Then all you need to do is copy the disk image sans certificate to your main Mac (slave Macintosh), where you are to mount the encrypted volume only by using the passphrase; and be sure that you do not store the disk image password in the keychain of your slave Macintosh, because that would defeat the purpose.
 
-Such a master–slave setup is also great for corporate settings, e.g. if a system administrator wants to provide employees with an encrypted read-write sparsebundle; in most cases the passphrase is only known to the employee, which he has to type in himself, but the admin will still have a recovery option using the admin S/MIME key on his own computer. In an alternate approach for a corporate setting the admin can also create an S/MIME certificate chain for the employee, and keep a copy for himself.
+Such a master–slave setup is also great for corporate settings, e.g. if a system administrator wants to provide employees with an encrypted read-write sparsebundle; in most cases the passphrase is only known to the employee, which he has to type in himself, but the admin will still have a recovery option using the admin S/MIME key on his own computer. In an alternate approach the admin can also create an S/MIME certificate chain for the employee, and keep a copy for himself.
 
 ## Current status
 Beta: it works (apparently), but it will remain in beta status until the DiMaGo verification script/workflow has been created
@@ -22,13 +22,17 @@ Beta: it works (apparently), but it will remain in beta status until the DiMaGo 
 ## Prerequisites for full functionality [optional, recommended]
 * [terminal-notifier](https://github.com/alloy/terminal-notifier)
 
+### Installation method #1
 Install using [Homebrew](http://brew.sh) with `brew install terminal-notifier` (or with a similar manager)
 
+### Installation method #2
+* move the terminal-notifier zip archive from the DiMaGo disk image to a folder on your main volume
+* unzip the application and move it to a suitable location, e.g. to `/Applications`, `/Applications/Utilities`, or `$HOME/Applications`
+
+### terminal-notifier: general notes
 You need to have Spotlight enabled for `mdfind` to locate the terminal-notifier.app on your volume; if you don't install terminal-notifier, or if you have deactivated Spotlight, the DiMaGo scripts will call notifications via AppleScript instead
 
-Because DiMaGo uses the macOS Notification Center, the minimum Mac OS requirement is **OS X 10.8 (Mountain Lion)**.
-
-## Installation & Usage
+## Installation
 * [Download the latest DMG](https://github.com/JayBrown/DiMaGo/releases) and open
 
 ### Workflow
@@ -77,15 +81,20 @@ Only necessary if for some reason you want to run this from the shell or another
 * stores UUIDs, SHA-256 checksums, S/MIME information (email addresses & SKIDs), and (optionally) passwords in discrete DiMaGo keychain entries
 * rescans in the background every 8 hours for new valid public S/MIME keys and new valid S/MIME identities (LaunchAgent installation required)
 * performs update check on every launch
+* uses the macOS Notification Center, so the minimum Mac OS requirement is **OS X 10.8 (Mountain Lion)**
 
-## Planned Functionality (this might take a while)
-* **second workflow/script to verify and trust certificates used to codesign** a disk image
+## Up next
+* check if target's parent directory is writable; if not, write disk image to `$HOME`
+* add background process key to LaunchAgent plist
+
+## Planned functionality (this might take a while)
+* **second workflow/script to verify and trust certificates used to codesign a disk image**
 * distribution as installer package (`.pkg`) including options for `terminal-notifier` and `dimago-create.sh`
 * preferences for disk image creation: volume icon, background image etc. (DMGs only)
 * research `hdiutil` options `-cacert`, and `-certificate` plus `-recover`
 * **third workflow/script to convert existing disk images**
 
-## General Notes
+## General notes
 * You can get trusted S/MIME certificates for free at [Comodo](https://www.comodo.com/home/email-security/free-email-certificate.php) (valid for one year) or using the [Volksverschlüsselung](https://volksverschluesselung.de) (valid for at least two years), but you can also self-issue an S/MIME certificate, either with macOS **Keychain Access**, with third-party CAs like **[xca](https://sourceforge.net/projects/xca/)**, or using the command line with `openssl`.
 * When self-issuing/signing S/MIME certificates, make sure that the leaf certificate contains a **Subject Key Identifier** (SKID); otherwise it will not be compatible with `hdiutil` and **DiMaGo**.
 * Self-signed or self-issued certificates will not be deemed "trusted" by the powers that be (incl. macOS), but the major advantage is that (as with PGP/GPG) you can simply ignore the powers that be. There is no third party involved: only the sender and the recipient(s) need to trust each other, and trust each other's certificates, and they only need to do it once. So self-signed certificates are (like PGP/GPG) *always* the better option. (They don't even need to include a valid email address, unless you actually want to use them for email message signing and protection as well.)
