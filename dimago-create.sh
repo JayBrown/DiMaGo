@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# DiMaGo v1.5.1 (beta)
+# DiMaGo v1.5.2 (beta)
 # DiMaGo ➤ Create (shell script version)
 #
 # Note: DiMaGo will remain in beta status until DiMaGo ➤ Verify has been scripted
@@ -8,7 +8,7 @@
 LANG=en_US.UTF-8
 export PATH=/usr/local/bin:$PATH
 ACCOUNT=$(/usr/bin/id -un)
-CURRENT_VERSION="1.51"
+CURRENT_VERSION="1.52"
 
 # check compatibility
 MACOS2NO=$(/usr/bin/sw_vers -productVersion | /usr/bin/awk -F. '{print $2}')
@@ -1171,27 +1171,41 @@ EOT)
 	BREAKER=""
 	until [[ "$OV_RETURN" == "true" ]]
 	do
-		DMG_NAME=$(/usr/bin/osascript 2>/dev/null << EOT
+		DMG_NAMING=$(/usr/bin/osascript 2>/dev/null << EOT
 tell application "System Events"
 	activate
 	set theLogoPath to ((path to library folder from user domain) as text) & "Caches:local.lcars.dimago:lcars.png"
-	set theBaseName to text returned of (display dialog "Enter the disk image's basename.$BASE_INFO" ¬
+	set {theNaming, theBaseName} to {button returned, text returned} of (display dialog "Enter the disk image's basename.$BASE_INFO" ¬
 		default answer "$TARGET_NAME.$TYPE" ¬
-		buttons {"Cancel", "Enter"} ¬
-		default button 2 ¬
+		buttons {"Cancel", "Enter & Append Date", "Enter"} ¬
+		default button 3 ¬
 		with title "DiMaGo: " & "$VOL_NAME" ¬
 		with icon file theLogoPath ¬
 		giving up after 180)
 end tell
-theBaseName
+theNaming & "@@@" & theBaseName
 EOT)
-		if [[ "$DMG_NAME" == "" ]] || [[ "$DMG_NAME" == "false" ]] ; then
+		if [[ "$DMG_NAMING" == "" ]] || [[ "$DMG_NAMING" == "false" ]] || [[ "$DMG_NAMING" == "@@@" ]] ; then
 			BREAKER="true"
 			OV_RETURN="true"
 			break
 		fi
-		if [[ "$DMG_NAME" != *".$TYPE" ]] ; then
-			DMG_NAME="$DMG_NAME.$TYPE"
+		NAMING=$(echo "$DMG_NAMING" | /usr/bin/awk -F"@@@" '{print $1}')
+		DMG_NAME=$(echo "$DMG_NAMING" | /usr/bin/awk -F"@@@" '{print $2}')
+		if [[ "$DMG_NAME" == "" ]] || [[ "$DMG_NAME" == ".$TYPE" ]] || [[ "$DMG_NAME" == "$TYPE" ]] ; then
+			DMG_NAME="$TARGET_NAME"
+		fi
+		if [[ "$NAMING" == "Enter & Append Date" ]] ; then
+			APPDATE=$(/bin/date "+%Y%m%d")
+			if [[ "$DMG_NAME" != *".$TYPE" ]] ; then
+				DMG_NAME="$DMG_NAME-$APPDATE.$TYPE"
+			else
+				DMG_NAME="${DMG_NAME//.$TYPE}-$APPDATE.$TYPE"
+			fi
+		elif [[ "$NAMING" == "Enter" ]] ; then
+			if [[ "$DMG_NAME" != *".$TYPE" ]] ; then
+				DMG_NAME="$DMG_NAME.$TYPE"
+			fi
 		fi
 		if [[ -f "$TARGET_PARENT/$DMG_NAME" ]] ; then
 			OV_CHOICE=$(/usr/bin/osascript 2>/dev/null << EOT

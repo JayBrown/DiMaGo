@@ -18,7 +18,7 @@ Such a master–slave setup is also great for corporate settings, e.g. if a syst
 
 ## Functionality
 * creates two types of disk images, read-only DMGs or read/write growable sparsebundles, from a source folder
-* asks user for disk image's volume name and basename
+* asks user for disk image's volume name and basename with option to append the current date
 * asks user for sparsebundle's virtual volume size (default: 5 GB; min.: 1 GB; max.: approx. 8 EB)
 * creates unencrypted or encrypted disk images
 * encrypts with AES-128 (**less secure**) or AES-256 (**more secure**)
@@ -45,9 +45,6 @@ Such a master–slave setup is also great for corporate settings, e.g. if a syst
 * rescans in the background every 8 hours for new valid public S/MIME keys and new valid S/MIME identities (LaunchAgent installation required)
 * performs update check on every launch
 * uses the macOS Notification Center, so the minimum Mac OS requirement is **OS X 10.8 (Mountain Lion)**
-
-## Up next
-* option to append date to disk image basename
 
 ## Planned functionality (this might take a while)
 * **second workflow/script to verify and trust certificates used to codesign a disk image**
